@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from './auth-context';
 import {
   api,
@@ -6,210 +6,239 @@ import {
   Student, Semester, Subject, Unit, StudyMaterial,
   Quiz, Question, QuestionWithQuizInfo, QuizAttempt, Notification,
 } from './api';
+import {
+  cacheGet, cacheSet, cacheDelete, cacheDeletePrefix,
+  cacheCleanExpired, getCacheSizeMB, CACHE_TTL,
+} from './local-cache';
+
+// Clean expired entries on module load
+cacheCleanExpired();
+
+// ─── Core hook: stale-while-revalidate ───────────────────────────────────────
+function useCachedFetch<T>(
+  cacheKey: string | null,
+  fetcher: () => Promise<T>,
+  ttlMs: number,
+  deps: unknown[] = [],
+) {
+  const [data, setData] = useState<T | null>(() => {
+    if (!cacheKey) return null;
+    const cached = cacheGet<T>(cacheKey);
+    return cached ? cached.data : null;
+  });
+
+  const [loading, setLoading] = useState<boolean>(() => {
+    if (!cacheKey) return true;
+    const cached = cacheGet<T>(cacheKey);
+    return !cached;
+  });
+
+  const [error, setError] = useState<string | null>(null);
+  const isMounted = useRef(true);
+
+  useEffect(() => {
+    isMounted.current = true;
+    return () => { isMounted.current = false; };
+  }, []);
+
+  const fetch = async (force = false) => {
+    if (!cacheKey) return;
+    const cached = cacheGet<T>(cacheKey);
+
+    if (cached && !cached.isStale && !force) {
+      if (isMounted.current) { setData(cached.data); setLoading(false); }
+      return;
+    }
+
+    if (cached?.isStale && isMounted.current) {
+      setData(cached.data);
+      setLoading(false);
+    }
+
+    try {
+      if (!cached) setLoading(true);
+      const fresh = await fetcher();
+      if (isMounted.current) {
+        setData(fresh);
+        setError(null);
+        cacheSet(cacheKey, fresh, ttlMs);
+      }
+    } catch (err: any) {
+      if (isMounted.current) setError(err.message);
+    } finally {
+      if (isMounted.current) setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetch(); }, [cacheKey, ...deps]);
+
+  return { data, loading, error, refetch: () => fetch(true) };
+}
 
 // ─── Semesters ────────────────────────────────────────────────────────────────
 export function useSemesters() {
   const { authVersion } = useAuth();
-  const [semesters, setSemesters] = useState<Semester[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchSemesters = async () => {
-    try {
-      setLoading(true);
-      const data = await api.getSemesters();
-      setSemesters(data);
-      setError(null);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { fetchSemesters(); }, [authVersion]);
-  return { semesters, loading, error, refetch: fetchSemesters };
+  const { data, loading, error, refetch } = useCachedFetch(
+    'semesters',
+    () => api.getSemesters(),
+    CACHE_TTL.SEMESTERS,
+    [authVersion],
+  );
+  return { semesters: data ?? [], loading, error, refetch };
 }
 
 // ─── Subjects ─────────────────────────────────────────────────────────────────
 export function useSubjects(semesterNumber?: number) {
   const { authVersion } = useAuth();
-  const [subjects, setSubjects] = useState<Subject[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const cacheKey = semesterNumber != null ? `subjects_sem_${semesterNumber}` : 'subjects_all';
 
-  const fetchSubjects = async () => {
-    try {
-      setLoading(true);
-      const data = semesterNumber
-        ? await api.getSubjectsBySemester(semesterNumber)
-        : await api.getSubjects();
-      setSubjects(data);
-      setError(null);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data, loading, error, refetch } = useCachedFetch(
+    cacheKey,
+    () => semesterNumber != null ? api.getSubjectsBySemester(semesterNumber) : api.getSubjects(),
+    CACHE_TTL.SUBJECTS,
+    [authVersion, semesterNumber],
+  );
 
-  useEffect(() => { fetchSubjects(); }, [authVersion, semesterNumber]);
-
-  const createSubject = async (data: Omit<Subject, 'id'>) => {
-    const newSubject = await api.createSubject(data);
-    await fetchSubjects();
+  const createSubject = async (subjectData: Omit<Subject, 'id'>) => {
+    const newSubject = await api.createSubject(subjectData);
+    cacheDeletePrefix('subjects_');
+    cacheDeletePrefix('semester_stats_');
+    await refetch();
     return newSubject;
   };
 
-  const updateSubject = async (id: string, data: Partial<Subject>) => {
-    const updated = await api.updateSubject(id, data);
-    await fetchSubjects();
+  const updateSubject = async (id: string, subjectData: Partial<Subject>) => {
+    const updated = await api.updateSubject(id, subjectData);
+    cacheDeletePrefix('subjects_');
+    cacheDeletePrefix('semester_stats_');
+    await refetch();
     return updated;
   };
 
   const deleteSubject = async (id: string) => {
     await api.deleteSubject(id);
-    await fetchSubjects();
+    cacheDeletePrefix('subjects_');
+    cacheDeletePrefix('semester_stats_');
+    await refetch();
   };
 
-  return { subjects, loading, error, refetch: fetchSubjects, createSubject, updateSubject, deleteSubject };
+  return { subjects: data ?? [], loading, error, refetch, createSubject, updateSubject, deleteSubject };
 }
 
 // ─── Units ────────────────────────────────────────────────────────────────────
 export function useUnits(subjectId: string | null) {
   const { authVersion } = useAuth();
-  const [units, setUnits] = useState<Unit[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const cacheKey = subjectId ? `units_${subjectId}` : null;
 
-  const fetchUnits = async () => {
-    if (!subjectId) { setUnits([]); setLoading(false); return; }
-    try {
-      setLoading(true);
-      const data = await api.getUnitsBySubject(subjectId);
-      setUnits(data);
-      setError(null);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { fetchUnits(); }, [authVersion, subjectId]);
+  const { data, loading, error, refetch } = useCachedFetch(
+    cacheKey,
+    () => api.getUnitsBySubject(subjectId!),
+    CACHE_TTL.UNITS,
+    [authVersion, subjectId],
+  );
 
   const createUnit = async (data: Omit<Unit, 'id'>) => {
     const newUnit = await api.createUnit(data);
-    await fetchUnits();
+    if (cacheKey) cacheDelete(cacheKey);
+    cacheDeletePrefix('semester_stats_');
+    await refetch();
     return newUnit;
   };
 
   const updateUnit = async (id: string, data: Partial<Unit>) => {
     const updated = await api.updateUnit(id, data);
-    await fetchUnits();
+    if (cacheKey) cacheDelete(cacheKey);
+    await refetch();
     return updated;
   };
 
   const deleteUnit = async (id: string) => {
     await api.deleteUnit(id);
-    await fetchUnits();
+    if (cacheKey) cacheDelete(cacheKey);
+    cacheDeletePrefix('semester_stats_');
+    await refetch();
   };
 
-  return { units, loading, error, refetch: fetchUnits, createUnit, updateUnit, deleteUnit };
+  return { units: data ?? [], loading, error, refetch, createUnit, updateUnit, deleteUnit };
 }
 
 // ─── Study Materials ──────────────────────────────────────────────────────────
 export function useStudyMaterials(unitId: string | null) {
   const { authVersion } = useAuth();
-  const [materials, setMaterials] = useState<StudyMaterial[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const cacheKey = unitId ? `materials_${unitId}` : null;
 
-  const fetchMaterials = async () => {
-    if (!unitId) { setMaterials([]); setLoading(false); return; }
-    try {
-      setLoading(true);
-      const data = await api.getStudyMaterialsByUnit(unitId);
-      setMaterials(data);
-      setError(null);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data, loading, error, refetch } = useCachedFetch(
+    cacheKey,
+    () => api.getStudyMaterialsByUnit(unitId!),
+    CACHE_TTL.MATERIALS,
+    [authVersion, unitId],
+  );
 
-  useEffect(() => { fetchMaterials(); }, [authVersion, unitId]);
-
-  const createMaterial = async (data: {
+  const createMaterial = async (matData: {
     unitId: string; title: string; description?: string;
     type: "pdf" | "video" | "link" | "document";
     url: string; fileName?: string; fileSize?: number; order?: number;
   }) => {
-    const newMaterial = await api.createStudyMaterial(data);
-    await fetchMaterials();
+    const newMaterial = await api.createStudyMaterial(matData);
+    if (cacheKey) cacheDelete(cacheKey);
+    cacheDeletePrefix('semester_stats_');
+    await refetch();
     return newMaterial;
   };
 
-  const updateMaterial = async (id: string, data: Partial<StudyMaterial>) => {
-    const updated = await api.updateStudyMaterial(id, data);
-    await fetchMaterials();
+  const updateMaterial = async (id: string, matData: Partial<StudyMaterial>) => {
+    const updated = await api.updateStudyMaterial(id, matData);
+    if (cacheKey) cacheDelete(cacheKey);
+    await refetch();
     return updated;
   };
 
   const deleteMaterial = async (id: string) => {
     await api.deleteStudyMaterial(id);
-    await fetchMaterials();
+    if (cacheKey) cacheDelete(cacheKey);
+    cacheDeletePrefix('semester_stats_');
+    await refetch();
   };
 
-  return { materials, loading, error, refetch: fetchMaterials, createMaterial, updateMaterial, deleteMaterial };
+  return { materials: data ?? [], loading, error, refetch, createMaterial, updateMaterial, deleteMaterial };
 }
 
 // ─── Quizzes (Admin) ──────────────────────────────────────────────────────────
-// Uses `api` (AdminApiClient) — only for teacher/admin dashboard
 export function useQuizzes() {
   const { authVersion } = useAuth();
-  const [quizzes, setQuizzes] = useState<Quiz[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data, loading, error, refetch } = useCachedFetch(
+    'quizzes_all',
+    () => api.getQuizzes(),
+    CACHE_TTL.QUIZZES,
+    [authVersion],
+  );
 
-  const fetchQuizzes = async () => {
-    try {
-      setLoading(true);
-      const data = await api.getQuizzes();
-      setQuizzes(data);
-      setError(null);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { fetchQuizzes(); }, [authVersion]);
-
-  const createQuiz = async (data: Omit<Quiz, 'id' | 'createdAt'>) => {
-    const newQuiz = await api.createQuiz(data);
-    await fetchQuizzes();
+  const createQuiz = async (quizData: Omit<Quiz, 'id' | 'createdAt'>) => {
+    const newQuiz = await api.createQuiz(quizData);
+    cacheDelete('quizzes_all');
+    await refetch();
     return newQuiz;
   };
 
-  const updateQuiz = async (id: string, data: Partial<Quiz>) => {
-    const updated = await api.updateQuiz(id, data);
-    await fetchQuizzes();
+  const updateQuiz = async (id: string, quizData: Partial<Quiz>) => {
+    const updated = await api.updateQuiz(id, quizData);
+    cacheDelete('quizzes_all');
+    cacheDelete(`quiz_${id}`);
+    await refetch();
     return updated;
   };
 
   const deleteQuiz = async (id: string) => {
     await api.deleteQuiz(id);
-    await fetchQuizzes();
+    cacheDelete('quizzes_all');
+    cacheDelete(`quiz_${id}`);
+    await refetch();
   };
 
-  return { quizzes, loading, error, refetch: fetchQuizzes, createQuiz, updateQuiz, deleteQuiz };
+  return { quizzes: data ?? [], loading, error, refetch, createQuiz, updateQuiz, deleteQuiz };
 }
 
 // ─── Quiz Questions (Student-facing) ──────────────────────────────────────────
-// Uses `studentApi` — student token, never admin token
 export function useQuizQuestions(quizId: string | null) {
   const { authVersion } = useAuth();
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -235,7 +264,6 @@ export function useQuizQuestions(quizId: string | null) {
 }
 
 // ─── Admin Questions ──────────────────────────────────────────────────────────
-// Uses `api` (AdminApiClient)
 export function useAdminQuestions(quizId?: string) {
   const { authVersion } = useAuth();
   const [questions, setQuestions] = useState<QuestionWithQuizInfo[]>([]);
@@ -259,94 +287,49 @@ export function useAdminQuestions(quizId?: string) {
 
   const createQuestion = async (data: {
     questionText: string; options: string[]; correctAnswer: number;
-    marks?: number; explanation?: string | null;
-    quizId?: string; order?: number;
+    marks?: number; explanation?: string | null; quizId?: string; order?: number;
   }): Promise<QuestionWithQuizInfo> => {
     const { quizId: legacyQuizId, order: _order, ...bankData } = data;
     const created = await api.createQuestion(bankData);
     const targetQuizId = quizId ?? legacyQuizId;
-    if (targetQuizId) {
-      await api.addQuestionToQuiz(targetQuizId, created.id);
-    }
+    if (targetQuizId) await api.addQuestionToQuiz(targetQuizId, created.id);
     await fetchQuestions();
-    return {
-      ...created,
-      usedInQuizzes: targetQuizId
-        ? [{ quizId: targetQuizId, quizTitle: '', quizSubjectId: '' }]
-        : [],
-    };
+    return { ...created, usedInQuizzes: targetQuizId ? [{ quizId: targetQuizId, quizTitle: '', quizSubjectId: '' }] : [] };
   };
 
-  const updateQuestion = async (id: string, data: {
-    questionText?: string; options?: string[]; correctAnswer?: number;
-    marks?: number; explanation?: string | null;
-  }): Promise<Question> => {
+  const updateQuestion = async (id: string, data: { questionText?: string; options?: string[]; correctAnswer?: number; marks?: number; explanation?: string | null }): Promise<Question> => {
     const updated = await api.updateQuestion(id, data);
     await fetchQuestions();
     return updated;
   };
 
-  const deleteQuestion = async (id: string): Promise<void> => {
-    await api.deleteQuestion(id);
-    await fetchQuestions();
-  };
+  const deleteQuestion = async (id: string): Promise<void> => { await api.deleteQuestion(id); await fetchQuestions(); };
+  const addToQuiz = async (targetQuizId: string, questionId: string, order?: number): Promise<void> => { await api.addQuestionToQuiz(targetQuizId, questionId, order); await fetchQuestions(); };
+  const removeFromQuiz = async (targetQuizId: string, questionId: string): Promise<void> => { await api.removeQuestionFromQuiz(targetQuizId, questionId); await fetchQuestions(); };
+  const reorderInQuiz = async (targetQuizId: string, orderedQuestionIds: string[]): Promise<void> => { await api.reorderQuestionsInQuiz(targetQuizId, orderedQuestionIds); await fetchQuestions(); };
 
-  const addToQuiz = async (targetQuizId: string, questionId: string, order?: number): Promise<void> => {
-    await api.addQuestionToQuiz(targetQuizId, questionId, order);
-    await fetchQuestions();
-  };
-
-  const removeFromQuiz = async (targetQuizId: string, questionId: string): Promise<void> => {
-    await api.removeQuestionFromQuiz(targetQuizId, questionId);
-    await fetchQuestions();
-  };
-
-  const reorderInQuiz = async (targetQuizId: string, orderedQuestionIds: string[]): Promise<void> => {
-    await api.reorderQuestionsInQuiz(targetQuizId, orderedQuestionIds);
-    await fetchQuestions();
-  };
-
-  return {
-    questions, loading, error, refetch: fetchQuestions,
-    createQuestion, updateQuestion, deleteQuestion,
-    addToQuiz, removeFromQuiz, reorderInQuiz,
-  };
+  return { questions, loading, error, refetch: fetchQuestions, createQuestion, updateQuestion, deleteQuestion, addToQuiz, removeFromQuiz, reorderInQuiz };
 }
 
 // ─── Quiz Attempts (Student) ──────────────────────────────────────────────────
-// Uses `studentApi` — student token, NEVER admin token
 export function useQuizAttempts() {
   const { authVersion } = useAuth();
-  const [attempts, setAttempts] = useState<QuizAttempt[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchAttempts = async () => {
-    try {
-      setLoading(true);
-      const data = await studentApi.getMyAttempts();
-      setAttempts(data);
-      setError(null);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { fetchAttempts(); }, [authVersion]);
-  return { attempts, loading, error, refetch: fetchAttempts };
+  const { data, loading, error, refetch } = useCachedFetch(
+    'my_attempts',
+    () => studentApi.getMyAttempts(),
+    CACHE_TTL.ATTEMPTS,
+    [authVersion],
+  );
+  return { attempts: data ?? [], loading, error, refetch };
 }
 
 // ─── Notifications ────────────────────────────────────────────────────────────
-// Works for both admin and student — picks the right client based on who's logged in
 export function useNotifications() {
   const { authVersion, user, student } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Use studentApi if a student is logged in, otherwise api (admin)
   const client = student ? studentApi : api;
 
   const fetchNotifications = async () => {
@@ -364,27 +347,15 @@ export function useNotifications() {
 
   useEffect(() => { fetchNotifications(); }, [authVersion]);
 
-  const markAsRead = async (id: string) => {
-    await client.markNotificationRead(id);
-    await fetchNotifications();
-  };
-
-  const markAllAsRead = async () => {
-    await client.markAllNotificationsRead();
-    await fetchNotifications();
-  };
-
-  const clearAll = async () => {
-    await client.clearAllNotifications();
-    await fetchNotifications();
-  };
+  const markAsRead = async (id: string) => { await client.markNotificationRead(id); await fetchNotifications(); };
+  const markAllAsRead = async () => { await client.markAllNotificationsRead(); await fetchNotifications(); };
+  const clearAll = async () => { await client.clearAllNotifications(); await fetchNotifications(); };
 
   const unreadCount = notifications.filter(n => !n.read).length;
   return { notifications, unreadCount, loading, error, refetch: fetchNotifications, markAsRead, markAllAsRead, clearAll };
 }
 
 // ─── Students (Admin) ─────────────────────────────────────────────────────────
-// Uses `api` (AdminApiClient) — admin only
 export function useStudents() {
   const { authVersion } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
@@ -408,17 +379,13 @@ export function useStudents() {
 
   useEffect(() => { fetchStudents(); }, [authVersion]);
 
-  const createStudent = async (data: {
-    name: string; email: string; phone: string; password: string;
-  }): Promise<Student> => {
+  const createStudent = async (data: { name: string; email: string; phone: string; password: string }): Promise<Student> => {
     const student = await api.createStudent(data);
     await fetchStudents();
     return student;
   };
 
-  const createStudentsBulk = async (students: {
-    name: string; email: string; phone: string; password: string;
-  }[]) => {
+  const createStudentsBulk = async (students: { name: string; email: string; phone: string; password: string }[]) => {
     const result = await api.createStudentsBulk(students);
     await fetchStudents();
     return result;
@@ -452,11 +419,14 @@ export function useStudents() {
     blocked: students.filter(s => s.status === 'blocked').length,
   };
 
+  return { students, loading, error, refetch: fetchStudents, createStudent, createStudentsBulk, updateStudent, resetStudentPassword, updateStudentStatus, deleteStudent, statusCounts };
+}
+
+// ─── Cache stats (optional — show in settings/debug screen) ──────────────────
+export function useCacheStats() {
+  const sizeMB = getCacheSizeMB();
   return {
-    students, loading, error, refetch: fetchStudents,
-    createStudent, createStudentsBulk,
-    updateStudent, resetStudentPassword,
-    updateStudentStatus, deleteStudent,
-    statusCounts,
+    sizeMB: Math.round(sizeMB * 100) / 100,
+    sizeText: sizeMB < 1 ? `${Math.round(sizeMB * 1024)} KB` : `${sizeMB.toFixed(2)} MB`,
   };
 }

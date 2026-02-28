@@ -5,28 +5,19 @@ import {
   Navigate,
   useNavigate,
 } from "react-router-dom";
+import { SplashScreen } from "./components/SplashScreen";
 import { TeacherDashboard } from "./components/teacher-dashboard";
 import { StudentDashboard } from "./components/student-dashboard";
 import { LoginPage } from "./components/login-page";
 import { seedDemoData } from "./data/demo-data-seeder";
 import { AuthProvider, useAuth } from "./lib/auth-context";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 
 // ─── Protected Route ──────────────────────────────────────────────────────────
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-slate-200 border-t-slate-900 rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-slate-600">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
+  if (loading) return <SplashScreen />;
   if (!user) return <Navigate to="/" replace />;
   return <>{children}</>;
 }
@@ -68,11 +59,16 @@ function StudentRoute() {
   );
 }
 
-// ─── App ──────────────────────────────────────────────────────────────────────
+// ─── App Content ──────────────────────────────────────────────────────────────
 function AppContent() {
+  const { authReady } = useAuth();
+
   useEffect(() => {
     seedDemoData();
   }, []);
+
+  // ✅ Show splash screen while auth is initializing
+  if (!authReady) return <SplashScreen />;
 
   return (
     <Routes>
@@ -84,8 +80,7 @@ function AppContent() {
   );
 }
 
-
-
+// ─── Root ─────────────────────────────────────────────────────────────────────
 export default function App() {
   return (
     <AuthProvider>

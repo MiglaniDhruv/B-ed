@@ -1,5 +1,6 @@
 // API Configuration and Service Layer
 const API_BASE_URL = 'https://kachhli.duckdns.org';
+// const API_BASE_URL = 'http://localhost:5000';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export interface User {

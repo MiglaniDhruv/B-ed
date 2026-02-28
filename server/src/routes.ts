@@ -713,10 +713,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     async (_req, res) => {
       try {
         const semesters = [
-          { id: 1, title: "Semester 1", number: 1 },
-          { id: 2, title: "Semester 2", number: 2 },
-          { id: 3, title: "Semester 3", number: 3 },
-          { id: 4, title: "Semester 4", number: 4 },
+          { id: 1, title: "Semester 1", name: "Semester 1", number: 1 },
+          { id: 2, title: "Semester 2", name: "Semester 2", number: 2 },
+          { id: 3, title: "Semester 3", name: "Semester 3", number: 3 },
+          { id: 4, title: "Semester 4", name: "Semester 4", number: 4 },
+     { id: 5, title: "Exam Preparation", name: "Exam Preparation", number: 5 }
         ];
         const semestersWithCounts = await Promise.all(
           semesters.map(async (sem) => {
@@ -739,10 +740,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     async (req, res) => {
       try {
         const semesterNumber = parseInt(req.params.semesterNumber);
-        if (isNaN(semesterNumber) || semesterNumber < 1 || semesterNumber > 4)
+        if (isNaN(semesterNumber) || semesterNumber < 1 || semesterNumber > 5)
           return res
             .status(400)
-            .json({ message: "Invalid semester number. Must be 1-4." });
+            .json({ message: "Invalid semester number. Must be 1-5  ." });
         res.json(await storage.getSubjectsBySemester(semesterNumber));
       } catch (err) {
         console.error("Get subjects by semester error:", err);
@@ -786,10 +787,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     async (req, res) => {
       try {
         const data = insertSubjectSchema.parse(req.body);
-        if (data.semesterNumber < 1 || data.semesterNumber > 4)
+        if (data.semesterNumber < 1 || data.semesterNumber > 5)
           return res
             .status(400)
-            .json({ message: "Semester number must be between 1 and 4" });
+            .json({ message: "Semester number must be between 1 and 5" });
         res.json(await storage.createSubject(data));
       } catch (err) {
         if (err instanceof z.ZodError)

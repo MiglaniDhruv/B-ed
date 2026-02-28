@@ -3,9 +3,24 @@ import React, {
   useContext,
   useState,
   useEffect,
+  useRef,
+  useCallback,
   ReactNode,
 } from "react";
 import { api, studentApi, User, Student } from "./api";
+
+// ─── Inactivity timeout: 5 minutes ───────────────────────────────────────────
+const INACTIVITY_TIMEOUT_MS = 5 * 60 * 1000;
+
+// ─── Activity events to track ─────────────────────────────────────────────────
+const ACTIVITY_EVENTS: (keyof WindowEventMap)[] = [
+  "mousemove",
+  "mousedown",
+  "keydown",
+  "touchstart",
+  "scroll",
+  "click",
+];
 
 interface AuthContextType {
   user: User | null;
@@ -28,10 +43,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [authReady, setAuthReady] = useState(false);
   const [authVersion, setAuthVersion] = useState(0);
 
-  useEffect(() => {
-    checkAuth();
-  }, []);
+  // ─── Refs ──────────────────────────────────────────────────────────────────
+  const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sessionPollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isLoggedIn = useRef(false); // track login state without stale closures
 
+  // ─── helpers ───────────────────────────────────────────────────────────────
   const isNetworkError = (message: string) =>
     message === "Failed to fetch" ||
     message.includes("NetworkError") ||
@@ -40,28 +57,161 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     message.includes("timeout") ||
     message.includes("aborted");
 
+  // ─── Core clear-all-state ─────────────────────────────────────────────────
+  const clearSession = useCallback(() => {
+    api.setToken(null);
+    studentApi.setToken(null);
+    localStorage.removeItem("student_data");
+    setUser(null);
+    setStudent(null);
+    setAuthReady(false);
+    setAuthVersion((v) => v + 1);
+    isLoggedIn.current = false;
+  }, []);
+
+  // ─── Inactivity logout ────────────────────────────────────────────────────
+  const resetInactivityTimer = useCallback(() => {
+    if (!isLoggedIn.current) return;
+    if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
+    inactivityTimer.current = setTimeout(async () => {
+      if (!isLoggedIn.current) return;
+      console.log("Logging out due to inactivity");
+      try {
+        if (api.getToken()) await api.logout();
+        else if (studentApi.getToken()) await studentApi.logout();
+      } catch {}
+      clearSession();
+      alert("You have been logged out due to 5 minutes of inactivity.");
+    }, INACTIVITY_TIMEOUT_MS);
+  }, [clearSession]);
+
+  const startActivityTracking = useCallback(() => {
+    resetInactivityTimer();
+    ACTIVITY_EVENTS.forEach((event) =>
+      window.addEventListener(event, resetInactivityTimer, { passive: true }),
+    );
+  }, [resetInactivityTimer]);
+
+  const stopActivityTracking = useCallback(() => {
+    if (inactivityTimer.current) {
+      clearTimeout(inactivityTimer.current);
+      inactivityTimer.current = null;
+    }
+    ACTIVITY_EVENTS.forEach((event) =>
+      window.removeEventListener(event, resetInactivityTimer),
+    );
+  }, [resetInactivityTimer]);
+
+  // ─── Session polling (detect logout from another device) ──────────────────
+  // Polls /api/auth/me every 30 seconds — if SESSION_INVALIDATED is returned,
+  // the user logged in from another device and this session is kicked.
+  const startSessionPolling = useCallback(() => {
+    if (sessionPollTimer.current) clearInterval(sessionPollTimer.current);
+    sessionPollTimer.current = setInterval(async () => {
+      if (!isLoggedIn.current) return;
+      try {
+        if (api.getToken()) {
+          await api.getMe();
+        } else if (studentApi.getToken()) {
+          // Students don't have a /me endpoint — use a lightweight check
+          // by calling getMe and catching the invalidation error
+          await studentApi.getSemesters();
+        }
+      } catch (err: any) {
+        const message = err?.message ?? "";
+        if (
+          message.includes("SESSION_INVALIDATED") ||
+          message.includes("Session expired") ||
+          message.includes("Logged in from another device") ||
+          err?.code === "SESSION_INVALIDATED"
+        ) {
+          clearSession();
+          alert(
+            "You have been logged out because your account was logged in from another device.",
+          );
+        }
+        // Ignore network errors — don't log out on flaky connections
+      }
+    }, 30_000); // poll every 30 seconds
+  }, [clearSession]);
+
+  const stopSessionPolling = useCallback(() => {
+    if (sessionPollTimer.current) {
+      clearInterval(sessionPollTimer.current);
+      sessionPollTimer.current = null;
+    }
+  }, []);
+
+  // ─── Start / stop everything when login state changes ─────────────────────
+  const onLoginSuccess = useCallback(() => {
+    isLoggedIn.current = true;
+    startActivityTracking();
+    startSessionPolling();
+  }, [startActivityTracking, startSessionPolling]);
+
+  const onLogout = useCallback(() => {
+    isLoggedIn.current = false;
+    stopActivityTracking();
+    stopSessionPolling();
+  }, [stopActivityTracking, stopSessionPolling]);
+
+  // ─── Cleanup on unmount ───────────────────────────────────────────────────
+  useEffect(() => {
+    return () => {
+      stopActivityTracking();
+      stopSessionPolling();
+    };
+  }, [stopActivityTracking, stopSessionPolling]);
+
+  // ─── Intercept API 401 SESSION_INVALIDATED responses globally ─────────────
+  // Patch fetch so any 401 with SESSION_INVALIDATED from ANY api call forces logout
+  useEffect(() => {
+    const originalFetch = window.fetch;
+    window.fetch = async (...args) => {
+      const response = await originalFetch(...args);
+      if (response.status === 401 && isLoggedIn.current) {
+        // Clone so we can read body without consuming it
+        const clone = response.clone();
+        try {
+          const data = await clone.json();
+          if (
+            data?.code === "SESSION_INVALIDATED" ||
+            data?.message?.includes("Session expired")
+          ) {
+            clearSession();
+            onLogout();
+            alert(
+              "You have been logged out because your account was logged in from another device.",
+            );
+          }
+        } catch {}
+      }
+      return response;
+    };
+    return () => {
+      window.fetch = originalFetch;
+    };
+  }, [clearSession, onLogout]);
+
+  // ─── Initial auth check ───────────────────────────────────────────────────
   const checkAuth = async () => {
     try {
-      // ── Restore admin/user session ─────────────────────────────────────────
-      // api reads its own 'auth_token' from localStorage in its constructor.
       const userToken = api.getToken();
       if (userToken) {
         const { user } = await api.getMe();
         setUser(user);
-        return; // admin session found — done
+        onLoginSuccess();
+        return;
       }
 
-      // ── Restore student session ────────────────────────────────────────────
-      // studentApi reads its own 'student_auth_token' from localStorage.
-      // We do NOT call /api/auth/me for students — we restore from saved data.
       const studentToken = studentApi.getToken();
       if (studentToken) {
         const savedStudent = localStorage.getItem("student_data");
         if (savedStudent) {
           try {
             setStudent(JSON.parse(savedStudent));
+            onLoginSuccess();
           } catch {
-            // ignore parse errors — clear bad data
             studentApi.setToken(null);
             localStorage.removeItem("student_data");
           }
@@ -73,7 +223,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.warn("Auth check skipped — network unavailable:", message);
       } else {
         console.error("Auth check failed:", message);
-        // Clear only admin token on failure
         api.setToken(null);
         setUser(null);
       }
@@ -84,39 +233,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // ── Admin login ────────────────────────────────────────────────────────────
-  // Uses `api` (AdminApiClient) — token stored under 'auth_token'
-  const login = async (email: string, password: string) => {
-    // api.login() internally calls setToken which writes to 'auth_token'
-    const { user } = await api.login(email, password);
+  useEffect(() => {
+    checkAuth();
+  }, []);
 
-    // Clear any lingering student session — they can't both be active
+  // ─── Admin login ──────────────────────────────────────────────────────────
+  const login = async (email: string, password: string) => {
+    const { user } = await api.login(email, password);
     studentApi.setToken(null);
     localStorage.removeItem("student_data");
-
     setStudent(null);
     setUser(user);
     setAuthReady(true);
     setAuthVersion((v) => v + 1);
+    onLoginSuccess();
   };
 
-  // ── Student login ──────────────────────────────────────────────────────────
-  // Uses `studentApi` (StudentApiClient) — token stored under 'student_auth_token'
+  // ─── Student login ────────────────────────────────────────────────────────
   const studentLogin = async (identifier: string, password: string) => {
-    // studentApi.studentLogin() internally calls setToken which writes to 'student_auth_token'
     const { student } = await studentApi.studentLogin(identifier, password);
     localStorage.setItem("student_data", JSON.stringify(student));
-
-    // Clear any lingering admin session
     api.setToken(null);
-
     setUser(null);
     setStudent(student);
     setAuthReady(true);
     setAuthVersion((v) => v + 1);
+    onLoginSuccess();
   };
 
-  // ── Logout (both) ──────────────────────────────────────────────────────────
+  // ─── Logout ───────────────────────────────────────────────────────────────
   const logout = async () => {
     try {
       if (user) await api.logout();
@@ -124,18 +269,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error("Logout error:", error);
     } finally {
-      // Clear both tokens to be safe
-      api.setToken(null);
-      studentApi.setToken(null);
-      localStorage.removeItem("student_data");
-      setUser(null);
-      setStudent(null);
-      setAuthReady(false);
-      setAuthVersion((v) => v + 1);
+      clearSession();
+      onLogout();
     }
   };
 
-  // ── Refresh admin user ─────────────────────────────────────────────────────
+  // ─── Refresh admin user ───────────────────────────────────────────────────
   const refreshUser = async () => {
     try {
       const { user } = await api.getMe();
@@ -146,11 +285,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.warn("User refresh skipped — network unavailable:", message);
       } else {
         console.error("Failed to refresh user:", message);
-        api.setToken(null);
-        setUser(null);
-        setStudent(null);
-        setAuthReady(false);
-        setAuthVersion((v) => v + 1);
+        clearSession();
+        onLogout();
       }
     }
   };

@@ -44,8 +44,12 @@ export function LoginPage({ onTeacherLogin, onStudentLogin }: LoginPageProps) {
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-slate-900 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <img src={logo} alt="Logo" className="w-12 h-12" />
+          <div className="mx-auto mb-4 w-24 h-24">
+            <img
+              src={logo}
+              alt="Logo"
+              className="w-full h-full rounded-full object-cover"
+            />
           </div>
           <h1 className="text-3xl font-bold text-slate-900 mb-2">
             Welcome Back
@@ -144,7 +148,7 @@ export function LoginPage({ onTeacherLogin, onStudentLogin }: LoginPageProps) {
         </Card>
 
         <p className="text-center text-xs text-slate-500 mt-6">
-          Educational Platform © 2026
+          Kachhli Quiz App &copy; {new Date().getFullYear()}. All rights reserved.
         </p>
       </div>
     </div>

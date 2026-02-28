@@ -20,9 +20,13 @@ export function AppHeader({
         {/* Title row */}
         <div className="flex items-center justify-between h-14">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-slate-900 rounded-lg flex items-center justify-center flex-shrink-0">
-              <img src={logo} alt="Logo" className="w-7 h-7" />
-            </div>
+            <div className="mx-auto w-20 h-20">
+                        <img
+                          src={logo}
+                          alt="Logo"
+                          className="w-full h-full rounded-full object-cover"
+                        />
+                      </div>
             <div>
               <h1 className="text-base font-semibold text-slate-900 leading-tight">
                 {title}
