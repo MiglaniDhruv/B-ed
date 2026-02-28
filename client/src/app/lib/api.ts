@@ -1,5 +1,5 @@
 // API Configuration and Service Layer
-const API_BASE_URL = 'https://kachhli.duckdns.org' ;
+const API_BASE_URL = 'http://localhost:3000' ;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export interface User {
@@ -23,9 +23,7 @@ export interface StudyMaterial {
 }
 export interface Quiz {
   id: string; subjectId: string; title: string; description: string | null;
-  duration: number | null; totalMarks: number | null; isActive: boolean | null;
-  allowReview: boolean | null; // ← NEW: controls if students can review answers after quiz
-  createdAt: Date | null;
+  duration: number | null; totalMarks: number | null; isActive: boolean | null; createdAt: Date | null;
 }
 export interface Question {
   id: string; quizId: string | null; questionText: string; options: string[];
@@ -237,6 +235,7 @@ class StudentApiClient extends ApiClient {
   async markNotificationRead(id: string): Promise<{ success: boolean }> { return this.request(`/api/notifications/${id}/read`, { method: 'PUT' }); }
   async markAllNotificationsRead(): Promise<{ success: boolean }> { return this.request('/api/notifications/read-all', { method: 'PUT' }); }
   async clearAllNotifications(): Promise<{ success: boolean }> { return this.request('/api/notifications/clear-all', { method: 'DELETE' }); }
+  // Active (non-expired) notices for students
   async getActiveNotices(): Promise<Notice[]> { return this.request('/api/notices'); }
 }
 

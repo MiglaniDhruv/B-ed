@@ -1458,45 +1458,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     },
   );
-  app.put(
-    "/api/notifications/:id/read",
-    requireAuth,
-    // requireValidSession,
-    async (req, res) => {
-      try {
-        await storage.markNotificationRead(req.params.id);
-        res.json({ success: true });
-      } catch {
-        res.status(500).json({ message: "Failed to mark notification" });
-      }
-    },
-  );
-  app.put(
-    "/api/notifications/read-all",
-    requireAuth,
-    // requireValidSession,
-    async (req, res) => {
-      try {
-        await storage.markAllNotificationsRead(req.session.userId!);
-        res.json({ success: true });
-      } catch {
-        res.status(500).json({ message: "Failed to mark all notifications" });
-      }
-    },
-  );
-  app.delete(
-    "/api/notifications/clear-all",
-    requireAuth,
-    // requireValidSession,
-    async (req, res) => {
-      try {
-        await storage.clearAllNotifications(req.session.userId!);
-        res.json({ success: true });
-      } catch {
-        res.status(500).json({ message: "Failed to clear notifications" });
-      }
-    },
-  );
+// ✅ read-all MUST come BEFORE /:id/read
+app.put(
+  "/api/notifications/read-all",
+  requireAuth,
+  async (req, res) => {
+    try {
+      await storage.markAllNotificationsRead(req.session.userId!);
+      res.json({ success: true });
+    } catch {
+      res.status(500).json({ message: "Failed to mark all notifications" });
+    }
+  },
+);
+
+app.put(
+  "/api/notifications/:id/read",
+  requireAuth,
+  async (req, res) => {
+    try {
+      await storage.markNotificationRead(req.params.id);
+      res.json({ success: true });
+    } catch {
+      res.status(500).json({ message: "Failed to mark notification" });
+    }
+  },
+);
+
+app.delete(
+  "/api/notifications/clear-all",
+  requireAuth,
+  async (req, res) => {
+    try {
+      await storage.clearAllNotifications(req.session.userId!);
+      res.json({ success: true });
+    } catch {
+      res.status(500).json({ message: "Failed to clear notifications" });
+    }
+  },
+);
 
   // ========== ADMIN STATS & USERS ==========
   app.get(

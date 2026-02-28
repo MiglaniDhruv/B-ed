@@ -315,6 +315,7 @@ export class FirestoreStorage implements IStorage {
       duration: data.duration ?? null,
       totalMarks: data.totalMarks ?? null,
       isActive: data.isActive ?? null,
+      allowReview: data.allowReview ?? false,
       createdAt: toDate(data.createdAt),
     };
   }
@@ -578,6 +579,7 @@ export class FirestoreStorage implements IStorage {
       subjectId: data.subjectId ?? "",
       title: data.title,
       isActive: data.isActive ?? true,
+      allowReview: data.allowReview ?? false, 
       createdAt: now,
     };
     if (data.description) doc.description = data.description;

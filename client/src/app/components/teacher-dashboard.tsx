@@ -183,6 +183,7 @@ export function TeacherDashboard({ onBack }: TeacherDashboardProps) {
     setAnalytics(null);
     setAnalyticsError(null);
   };
+
   const handleCancelBuilder = () => {
     setShowQuizBuilder(false);
     refetchQuizzes();
@@ -208,17 +209,18 @@ export function TeacherDashboard({ onBack }: TeacherDashboardProps) {
     setShowQuizDetailsForm(true);
   };
 
-  // ── KEY FIX 1: allowReview is now correctly passed to api.createQuiz
-  // ── KEY FIX 2: quiz is created ONLY here — never earlier in the flow
-  // ── KEY FIX 3: defined at top level (not inside inner component) so state is never stale
+  // ── handleQuizDetailsComplete
+  // - description is string | null  (null when teacher left it blank)
+  // - allowReview is boolean         (controlled by the toggle in QuizDetailsForm)
+  // - quiz is created ONCE here, never earlier in the flow
   const handleQuizDetailsComplete = async (quizDetails: {
     title: string;
-    description: string;
+    description: string | null;
     duration: number;
     subjectId: string;
     allowReview: boolean;
   }) => {
-    if (isSavingQuiz) return; // prevent double-submit
+    if (isSavingQuiz) return; // guard against double-submit
     setIsSavingQuiz(true);
     try {
       const totalMarks = selectedQuestionsForQuiz.reduce(
@@ -226,18 +228,17 @@ export function TeacherDashboard({ onBack }: TeacherDashboardProps) {
         0,
       );
 
-      // Quiz is created exactly once, only when teacher clicks "Create Quiz"
       const newQuiz = await api.createQuiz({
         subjectId: quizDetails.subjectId || "",
         title: quizDetails.title,
-        description: quizDetails.description || null,
+        description: quizDetails.description, // null if left blank — backend should accept null
         duration: quizDetails.duration,
         totalMarks,
-        allowReview: quizDetails.allowReview, // ← was missing before — this is what controlled the review button
+        allowReview: quizDetails.allowReview, // ← this is what controls whether students see the review button
         isActive: false,
       } as any);
 
-      // Link selected questions to the quiz
+      // Link each selected question to the newly created quiz
       for (const q of selectedQuestionsForQuiz) {
         try {
           await api.addQuestionToQuiz(newQuiz.id, q.id);
@@ -559,6 +560,8 @@ export function TeacherDashboard({ onBack }: TeacherDashboardProps) {
             onComplete={handleQuizDetailsComplete}
             onCancel={handleCancelQuizDetails}
             isSaving={isSavingQuiz}
+            // description is optional — no initialDescription needed
+            // allowReview defaults to false in the form unless passed
           />
         </div>
       );
@@ -697,7 +700,7 @@ export function TeacherDashboard({ onBack }: TeacherDashboardProps) {
                       >
                         {quiz.isActive ? "Published" : "Draft"}
                       </span>
-                      {/* Bonus: show a badge when review is enabled so teacher knows at a glance */}
+                      {/* Show a badge when review is enabled so teacher knows at a glance */}
                       {quiz.allowReview && (
                         <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100">
                           Review On

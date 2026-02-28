@@ -10,10 +10,17 @@ import * as path from "path";
 import cors from "cors";
 const app = express();
 //  cors = cors();
-app.use(cors({
-      origin: "https://kachhli.duckdns.org",
-      credentials: true,
-    }));
+app.use(
+  cors({
+    origin: [
+      "https://kachhli.duckdns.org",
+      "http://localhost:3000",
+      "http://localhost:5173",
+      "http://localhost:8081",
+    ],
+    credentials: true,
+  }),
+);
 
 // function setupCors(app: express.Application) {
 //   app.use(

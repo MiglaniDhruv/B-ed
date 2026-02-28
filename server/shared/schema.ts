@@ -13,7 +13,7 @@ export const registerSchema = z.object({
   displayName: z.string().optional(),
 });
 
-// ─── Semester (hardcoded 1–4, no Firestore collection) ───────────────────────
+// ─── Semester ─────────────────────────────────────────────────────────────────
 export interface Semester {
   id: number;
   number: number;
@@ -36,7 +36,7 @@ export interface User {
   displayName: string | null;
   avatarUrl: string | null;
   darkMode: boolean | null;
-  phone: string | null;        // ✅ ADD THIS
+  phone: string | null;
   createdAt: Date | null;
 }
 
@@ -142,10 +142,12 @@ export interface InsertStudyMaterial {
 export const insertQuizSchema = z.object({
   subjectId: z.string().optional().default(""),
   title: z.string().min(1, "Quiz title is required"),
-  description: z.string().optional(),
+  description: z.string().nullable().optional(),
   duration: z.number().int().positive().optional(),
   totalMarks: z.number().int().positive().optional(),
   isActive: z.boolean().optional(),
+  // ✅ allowReview: controls whether students can see correct answers after submitting
+  allowReview: z.boolean().optional().default(false),
 });
 
 export interface Quiz {
@@ -156,16 +158,18 @@ export interface Quiz {
   duration: number | null;
   totalMarks: number | null;
   isActive: boolean | null;
+  allowReview: boolean | null; // ✅ ADDED
   createdAt: Date | null;
 }
 
 export interface InsertQuiz {
   subjectId?: string;
   title: string;
-  description?: string;
+  description?: string | null;
   duration?: number;
   totalMarks?: number;
   isActive?: boolean;
+  allowReview?: boolean; // ✅ ADDED
 }
 
 // ─── Question ─────────────────────────────────────────────────────────────────
@@ -174,7 +178,6 @@ export const insertQuestionSchema = z.object({
   questionText: z.string().min(1, "Question text is required"),
   options: z.array(z.string()).min(2, "At least 2 options required"),
   correctAnswer: z.number().int().min(0),
-  // explanation: z.string().optional().default(""),
   marks: z.number().int().positive().optional(),
   order: z.number().int().optional(),
 });
@@ -218,18 +221,16 @@ export interface Notification {
   userId: string;
   title: string;
   message: string;
-  type: string; // "quiz" | "material" | "notice" | "info"
+  type: string;
   read: boolean | null;
   createdAt: Date | null;
 }
 
 // ─── Notice Board ─────────────────────────────────────────────────────────────
-// Notices are admin-written announcements visible to all students.
-// They auto-expire at expiresAt and disappear from student view.
 export const insertNoticeSchema = z.object({
   title: z.string().min(1, "Title is required"),
   message: z.string().min(1, "Message is required"),
-  expiresAt: z.string(), // ISO date string from frontend
+  expiresAt: z.string(),
   priority: z.enum(["normal", "important", "urgent"]).optional().default("normal"),
 });
 

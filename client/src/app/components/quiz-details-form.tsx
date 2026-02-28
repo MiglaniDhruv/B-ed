@@ -8,7 +8,7 @@ interface QuizDetailsFormProps {
   selectedQuestions: Question[];
   onComplete: (details: {
     title: string;
-    description: string;
+    description: string | null;
     duration: number;
     subjectId: string;
     allowReview: boolean;
@@ -17,8 +17,9 @@ interface QuizDetailsFormProps {
   initialTitle?: string;
   initialDescription?: string;
   initialDuration?: number;
+  initialAllowReview?: boolean;
   isEditMode?: boolean;
-  isSaving?: boolean; // ← controlled externally by teacher-dashboard
+  isSaving?: boolean;
 }
 
 export function QuizDetailsForm({
@@ -28,13 +29,14 @@ export function QuizDetailsForm({
   initialTitle = "",
   initialDescription = "",
   initialDuration = 30,
+  initialAllowReview = false,
   isEditMode = false,
   isSaving = false,
 }: QuizDetailsFormProps) {
   const [title, setTitle] = useState(initialTitle);
   const [description, setDescription] = useState(initialDescription);
   const [duration, setDuration] = useState(initialDuration);
-  const [allowReview, setAllowReview] = useState(false);
+  const [allowReview, setAllowReview] = useState(initialAllowReview);
 
   const handleSubmit = () => {
     if (!title.trim()) {
@@ -43,10 +45,10 @@ export function QuizDetailsForm({
     }
     onComplete({
       title: title.trim(),
-      description: description.trim(),
+      description: description.trim() || null, // null when empty — truly optional
       duration,
       subjectId: "",
-      allowReview,
+      allowReview, // always passed, controlled by toggle
     });
   };
 
@@ -75,7 +77,7 @@ export function QuizDetailsForm({
           />
         </div>
 
-        {/* Description */}
+        {/* Description — optional, no asterisk, no validation */}
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1.5">
             Description{" "}
@@ -98,7 +100,7 @@ export function QuizDetailsForm({
           <input
             type="number"
             value={duration}
-            onChange={(e) => setDuration(Number(e.target.value))}
+            onChange={(e) => setDuration(Math.max(1, Number(e.target.value)))}
             min="1"
             className="w-40 px-3.5 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
           />
@@ -106,12 +108,12 @@ export function QuizDetailsForm({
 
         {/* Allow Review Toggle */}
         <div
-          className={`flex items-start justify-between gap-4 p-4 rounded-lg border-2 cursor-pointer transition-all ${
+          className={`flex items-start justify-between gap-4 p-4 rounded-lg border-2 cursor-pointer transition-all select-none ${
             allowReview
               ? "border-green-300 bg-green-50"
               : "border-slate-200 bg-slate-50"
           }`}
-          onClick={() => setAllowReview(!allowReview)}
+          onClick={() => setAllowReview((prev) => !prev)}
         >
           <div className="flex items-start gap-3">
             {allowReview ? (
@@ -134,18 +136,23 @@ export function QuizDetailsForm({
               </p>
             </div>
           </div>
+          {/* Toggle pill */}
           <div
-            className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 mt-0.5 ${allowReview ? "bg-green-500" : "bg-slate-300"}`}
+            className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 mt-0.5 ${
+              allowReview ? "bg-green-500" : "bg-slate-300"
+            }`}
           >
             <div
-              className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${allowReview ? "translate-x-5" : "translate-x-0.5"}`}
+              className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                allowReview ? "translate-x-5" : "translate-x-0.5"
+              }`}
             />
           </div>
         </div>
 
         {/* Summary */}
-        <div className="bg-slate-50 rounded-lg p-4 text-sm text-slate-600">
-          <div className="flex justify-between mb-1">
+        <div className="bg-slate-50 rounded-lg p-4 text-sm text-slate-600 space-y-1">
+          <div className="flex justify-between">
             <span>Questions:</span>
             <span className="font-medium text-slate-900">
               {selectedQuestions.length}
@@ -155,6 +162,14 @@ export function QuizDetailsForm({
             <span>Total Marks:</span>
             <span className="font-medium text-slate-900">
               {selectedQuestions.reduce((sum, q) => sum + (q.marks ?? 1), 0)}
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span>Answer Review:</span>
+            <span
+              className={`font-medium ${allowReview ? "text-green-600" : "text-slate-400"}`}
+            >
+              {allowReview ? "Enabled" : "Disabled"}
             </span>
           </div>
         </div>

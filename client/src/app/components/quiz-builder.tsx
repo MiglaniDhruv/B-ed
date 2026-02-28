@@ -310,8 +310,7 @@ export function QuizBuilder({
 
   // ── Cancel handling ───────────────────────────────────────────────────────
   const handleCancelClick = () => {
-    // Warn if: not edit mode AND (has questions OR title has been typed on Step 1)
-    if (!isEditMode && (questions.length > 0 || basicInfo.title.trim())) {
+    if (!isEditMode && questions.length > 0) {
       setShowCancelWarning(true);
     } else {
       onCancel();
@@ -648,34 +647,6 @@ export function QuizBuilder({
   if (step === "basic") {
     return (
       <div className="min-h-screen bg-slate-50 p-6">
-        {/* Cancel Warning Dialog — also shown on Step 1 */}
-        {showCancelWarning && (
-          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
-            <Card className="p-6 bg-white rounded-xl shadow-xl max-w-md w-full">
-              <h3 className="text-base font-semibold text-slate-900 mb-2">
-                Discard this quiz?
-              </h3>
-              <p className="text-sm text-slate-500 mb-5">
-                You've started filling in quiz details. If you go back now, all
-                progress will be lost.
-              </p>
-              <div className="flex gap-3">
-                <Button
-                  onClick={handleConfirmCancel}
-                  className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2.5 rounded-lg text-sm"
-                >
-                  Discard Quiz
-                </Button>
-                <Button
-                  onClick={() => setShowCancelWarning(false)}
-                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2.5 rounded-lg text-sm"
-                >
-                  Keep Editing
-                </Button>
-              </div>
-            </Card>
-          </div>
-        )}
         <div className="max-w-2xl mx-auto">
           <div className="flex items-center gap-4 mb-8">
             <button
@@ -820,28 +791,18 @@ export function QuizBuilder({
             <h3 className="text-base font-semibold text-slate-900 mb-2">
               Discard this quiz?
             </h3>
-            {questions.length > 0 ? (
-              <>
-                <p className="text-sm text-slate-600 mb-1">
-                  You've added{" "}
-                  <span className="font-semibold text-slate-800">
-                    {questions.length} question
-                    {questions.length !== 1 ? "s" : ""}
-                  </span>{" "}
-                  that haven't been saved to a quiz yet.
-                </p>
-                <p className="text-sm text-slate-500 mb-5">
-                  These questions will still be available in your{" "}
-                  <span className="font-medium">Question Bank</span>, but this
-                  quiz will be discarded.
-                </p>
-              </>
-            ) : (
-              <p className="text-sm text-slate-500 mb-5">
-                You've started filling in quiz details. If you go back now, all
-                progress will be lost.
-              </p>
-            )}
+            <p className="text-sm text-slate-600 mb-1">
+              You've added{" "}
+              <span className="font-semibold text-slate-800">
+                {questions.length} question{questions.length !== 1 ? "s" : ""}
+              </span>{" "}
+              that haven't been saved to a quiz yet.
+            </p>
+            <p className="text-sm text-slate-500 mb-5">
+              These questions will still be available in your{" "}
+              <span className="font-medium">Question Bank</span>, but this quiz
+              will be discarded.
+            </p>
             <div className="flex gap-3">
               <Button
                 onClick={handleConfirmCancel}
