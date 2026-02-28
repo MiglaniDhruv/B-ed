@@ -25,6 +25,7 @@ export const SEMESTERS: Semester[] = [
   { id: 2, number: 2, name: "Semester 2" },
   { id: 3, number: 3, name: "Semester 3" },
   { id: 4, number: 4, name: "Semester 4" },
+  { id: 5, number: 5, name: "Exam Preparation" },
 ];
 
 // ─── User ─────────────────────────────────────────────────────────────────────

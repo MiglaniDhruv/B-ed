@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { jsPDF } from "jspdf";
 import { Routes, Route, useNavigate, useLocation } from "react-router-dom";
 import { QuestionBankView } from "./question-bank-view";
 import { Card } from "./ui/card";
@@ -284,6 +285,90 @@ export function TeacherDashboard({ onBack }: TeacherDashboardProps) {
       await deleteQuiz(id);
     } catch {
       alert("Failed to delete quiz");
+    }
+  };
+
+  const handleDownloadQuizPdf = async (quiz: Quiz) => {
+    try {
+      // const questions = await api.getQuestionsByQuiz(quiz.id);
+      const questions = await api.getQuizQuestions(quiz.id);
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      let y = 20;
+
+      // Title
+      doc.setFontSize(18);
+      doc.setFont("helvetica", "bold");
+      doc.text(quiz.title, pageWidth / 2, y, { align: "center" });
+      y += 8;
+
+      // Info
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(100);
+      doc.text(
+        `Duration: ${quiz.duration ?? "—"} min  |  Total Marks: ${quiz.totalMarks ?? "—"}  |  Questions: ${questions.length}`,
+        pageWidth / 2,
+        y,
+        { align: "center" },
+      );
+      y += 12;
+
+      // Divider
+      doc.setDrawColor(200);
+      doc.line(14, y, pageWidth - 14, y);
+      y += 10;
+
+      // Questions
+      doc.setTextColor(0);
+      questions.forEach((q, idx) => {
+        // Page break check
+        if (y > 260) {
+          doc.addPage();
+          y = 20;
+        }
+
+        doc.setFontSize(11);
+        doc.setFont("helvetica", "bold");
+        const qLines = doc.splitTextToSize(
+          `Q${idx + 1}. ${q.questionText}`,
+          pageWidth - 28,
+        );
+        doc.text(qLines, 14, y);
+        y += qLines.length * 6 + 4;
+
+        // Options
+        doc.setFontSize(10);
+        const labels = ["A", "B", "C", "D"];
+        q.options.forEach((opt, oi) => {
+          if (y > 270) {
+            doc.addPage();
+            y = 20;
+          }
+          const isCorrect = oi === q.correctAnswer;
+          if (isCorrect) {
+            doc.setTextColor(22, 163, 74); // green
+            doc.setFont("helvetica", "bold");
+          } else {
+            doc.setTextColor(60, 60, 60);
+            doc.setFont("helvetica", "normal");
+          }
+          const optLines = doc.splitTextToSize(
+            `  ${labels[oi]}. ${opt}${isCorrect ? "  ✓" : ""}`,
+            pageWidth - 32,
+          );
+          doc.text(optLines, 18, y);
+          y += optLines.length * 5.5 + 1;
+        });
+
+        doc.setTextColor(0);
+        y += 8;
+      });
+
+      doc.save(`${quiz.title.replace(/\s+/g, "_")}.pdf`);
+    } catch (err) {
+      alert("Failed to generate PDF");
+      console.error(err);
     }
   };
 
@@ -749,6 +834,14 @@ export function TeacherDashboard({ onBack }: TeacherDashboardProps) {
                       className="p-2 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors"
                     >
                       <BarChart2 className="w-4 h-4" />
+                    </button>
+
+                    <button
+                      onClick={() => handleDownloadQuizPdf(quiz)}
+                      title="Download PDF"
+                      className="p-2 bg-orange-50 hover:bg-orange-100 text-orange-600 rounded-lg transition-colors"
+                    >
+                      <FileText className="w-4 h-4" />
                     </button>
                     {!quiz.isActive ? (
                       <Button

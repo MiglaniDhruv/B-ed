@@ -1,5 +1,5 @@
 // API Configuration and Service Layer
-const API_BASE_URL = 'https://kachhli.duckdns.org' ;
+const API_BASE_URL = 'http://localhost:5000';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export interface User {
@@ -23,6 +23,7 @@ export interface StudyMaterial {
 }
 export interface Quiz {
   id: string; subjectId: string; title: string; description: string | null;
+   allowReview?: boolean | null; 
   duration: number | null; totalMarks: number | null; isActive: boolean | null; createdAt: Date | null;
 }
 export interface Question {
