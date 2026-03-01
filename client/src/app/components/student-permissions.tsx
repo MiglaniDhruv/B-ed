@@ -103,18 +103,31 @@ export function StudentPermissions() {
 
   const handleAddStudent = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newEmail || !newPassword) {
-      alert("Email and password are required");
+
+    if (!newName.trim()) {
+      alert("Name is required");
       return;
     }
+
+    if (!newPassword.trim()) {
+      alert("Password is required");
+      return;
+    }
+
+    if (!newEmail.trim() && !newPhone.trim()) {
+      alert("Please enter Email or Phone number");
+      return;
+    }
+
     setSaving(true);
     try {
       await createStudent({
-        name: newName || newEmail.split("@")[0],
-        email: newEmail,
-        phone: newPhone,
+        name: newName.trim(),
+        email: newEmail.trim() || undefined,
+        phone: newPhone.trim() || undefined,
         password: newPassword,
       });
+
       setNewName("");
       setNewEmail("");
       setNewPhone("");
@@ -137,31 +150,44 @@ export function StudentPermissions() {
     setShowEditPassword(false);
   };
 
-  const handleEditSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingStudent) return;
-    setEditSaving(true);
-    try {
-      await updateStudent(editingStudent.id, {
-        name: editName,
-        email: editEmail,
-        phone: editPhone,
-      });
-      if (editPassword.trim()) {
-        if (editPassword.length < 6) {
-          alert("Password must be at least 6 characters");
-          setEditSaving(false);
-          return;
-        }
-        await resetStudentPassword(editingStudent.id, editPassword);
+const handleEditSave = async (e: React.FormEvent) => {
+  e.preventDefault();
+
+  if (!editName.trim()) {
+    alert("Name is required");
+    return;
+  }
+
+  if (!editEmail.trim() && !editPhone.trim()) {
+    alert(" Email or Phone is required");
+    return;
+  }
+
+  setEditSaving(true);
+
+  try {
+    await updateStudent(editingStudent!.id, {
+      name: editName.trim(),
+      email: editEmail.trim() || undefined,
+      phone: editPhone.trim() || undefined,
+    });
+
+    if (editPassword.trim()) {
+      if (editPassword.length < 6) {
+        alert("Password must be at least 6 characters");
+        setEditSaving(false);
+        return;
       }
-      setEditingStudent(null);
-    } catch (err: any) {
-      alert(err.message || "Failed to update student");
-    } finally {
-      setEditSaving(false);
+      await resetStudentPassword(editingStudent!.id, editPassword);
     }
-  };
+
+    setEditingStudent(null);
+  } catch (err: any) {
+    alert(err.message || "Failed to update student");
+  } finally {
+    setEditSaving(false);
+  }
+};
 
   const parseCsv = (raw: string) => {
     const lines = raw
@@ -346,7 +372,7 @@ export function StudentPermissions() {
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">
                   Name{" "}
-                  <span className="text-slate-400 font-normal">(optional)</span>
+                  {/* <span className="text-slate-400 font-normal">(optional)</span> */}
                 </label>
                 <div className="relative">
                   <Users className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -355,6 +381,7 @@ export function StudentPermissions() {
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
                     placeholder="John Doe"
+                    required
                     className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
                   />
                 </div>
@@ -370,7 +397,6 @@ export function StudentPermissions() {
                     value={newEmail}
                     onChange={(e) => setNewEmail(e.target.value)}
                     placeholder="student@example.com"
-                    required
                     className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
                   />
                 </div>
@@ -798,7 +824,6 @@ export function StudentPermissions() {
                     value={editEmail}
                     onChange={(e) => setEditEmail(e.target.value)}
                     placeholder="student@example.com"
-                    required
                     className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
                   />
                 </div>

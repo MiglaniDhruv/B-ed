@@ -576,52 +576,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
     },
   );
 
-  app.post(
-    "/api/admin/students",
-    requireAdminAuth,
-    // requireValidSession,
-    async (req, res) => {
-      try {
-        const { name, email, phone, password } = req.body;
-        if (!email || !password)
-          return res
-            .status(400)
-            .json({ message: "Email and password are required" });
-        if (password.length < 6)
-          return res
-            .status(400)
-            .json({ message: "Password must be at least 6 characters" });
-        const existing = await storage.getStudentByEmail(email);
-        if (existing)
-          return res
-            .status(400)
-            .json({ message: "A student with this email already exists" });
-        if (phone) {
-          const existingPhone = await storage.getStudentByPhone(phone);
-          if (existingPhone)
-            return res
-              .status(400)
-              .json({ message: "A student with this phone already exists" });
-        }
-        const hashedPassword = await bcrypt.hash(password, 12);
-        const student = await storage.createStudent(
-          {
-            name: name || email.split("@")[0],
-            email,
-            phone: phone || "",
-            password: hashedPassword,
-            enrollmentNumber: `ENR${Date.now()}`,
-            status: "approved",
-          },
-          password,
-        );
-        res.json(student);
-      } catch (err) {
-        console.error("Create student error:", err);
-        res.status(500).json({ message: "Failed to create student" });
+app.post("/api/admin/students", requireAdminAuth, async (req, res) => {
+  try {
+    let { name, email, phone, password } = req.body;
+
+    email = email?.trim() || null;
+    phone = phone?.trim() || null;
+
+    if (!name || !password) {
+      return res.status(400).json({ message: "Name and password required" });
+    }
+
+    if (!email && !phone) {
+      return res.status(400).json({
+        message: "Either email or phone number is required",
+      });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({
+        message: "Password must be at least 6 characters",
+      });
+    }
+
+    // ✅ Check email only if provided
+    if (email) {
+      const existing = await storage.getStudentByEmail(email);
+      if (existing) {
+        return res.status(400).json({
+          message: "A student with this email already exists",
+        });
       }
-    },
-  );
+    }
+
+    // ✅ Check phone only if provided
+    if (phone) {
+      const existingPhone = await storage.getStudentByPhone(phone);
+      if (existingPhone) {
+        return res.status(400).json({
+          message: "A student with this phone already exists",
+        });
+      }
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 12);
+
+    const student = await storage.createStudent(
+      {
+        name,
+        email: email ?? "",
+        phone: phone ?? "",
+        password: hashedPassword,
+        enrollmentNumber: `ENR${Date.now()}`,
+        status: "approved",
+      },
+      password,
+    );
+
+    res.json(student);
+  } catch (err) {
+    console.error("Create student error FULL:", err);
+    res.status(500).json({ message: "Failed to create student" });
+  }
+});
 
   app.put(
     "/api/admin/students/:id/reset-password",
@@ -651,28 +668,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     },
   );
 
-  app.put(
-    "/api/admin/students/:id",
-    requireAdminAuth,
-    // requireValidSession,
-    async (req, res) => {
-      try {
-        const { name, email, phone } = req.body;
-        if (!email)
-          return res.status(400).json({ message: "Email is required" });
-        const student = await storage.updateStudent(req.params.id, {
-          name,
-          email,
-          phone,
-        });
-        res.json(student);
-      } catch (err: any) {
-        res
-          .status(500)
-          .json({ message: err.message || "Failed to update student" });
+app.put(
+  "/api/admin/students/:id",
+  requireAdminAuth,
+  async (req, res) => {
+    try {
+      const { name, email, phone } = req.body;
+
+      if (!name) {
+        return res.status(400).json({ message: "Name is required" });
       }
-    },
-  );
+
+      if (!email && !phone) {
+        return res
+          .status(400)
+          .json({ message: "Either email or phone required" });
+      }
+
+      const student = await storage.updateStudent(req.params.id, {
+        name,
+        email: email || "",
+        phone: phone || "",
+      });
+
+      res.json(student);
+    } catch (err: any) {
+      res
+        .status(500)
+        .json({ message: err.message || "Failed to update student" });
+    }
+  },
+);
 
   app.put(
     "/api/admin/students/:id/status",
@@ -717,7 +743,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           { id: 2, title: "Semester 2", name: "Semester 2", number: 2 },
           { id: 3, title: "Semester 3", name: "Semester 3", number: 3 },
           { id: 4, title: "Semester 4", name: "Semester 4", number: 4 },
-     { id: 5, title: "Exam Preparation", name: "Exam Preparation", number: 5 }
+          {
+            id: 5,
+            title: "Exam Preparation",
+            name: "Exam Preparation",
+            number: 5,
+          },
         ];
         const semestersWithCounts = await Promise.all(
           semesters.map(async (sem) => {
@@ -1459,45 +1490,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     },
   );
-// ✅ read-all MUST come BEFORE /:id/read
-app.put(
-  "/api/notifications/read-all",
-  requireAuth,
-  async (req, res) => {
+  // ✅ read-all MUST come BEFORE /:id/read
+  app.put("/api/notifications/read-all", requireAuth, async (req, res) => {
     try {
       await storage.markAllNotificationsRead(req.session.userId!);
       res.json({ success: true });
     } catch {
       res.status(500).json({ message: "Failed to mark all notifications" });
     }
-  },
-);
+  });
 
-app.put(
-  "/api/notifications/:id/read",
-  requireAuth,
-  async (req, res) => {
+  app.put("/api/notifications/:id/read", requireAuth, async (req, res) => {
     try {
       await storage.markNotificationRead(req.params.id);
       res.json({ success: true });
     } catch {
       res.status(500).json({ message: "Failed to mark notification" });
     }
-  },
-);
+  });
 
-app.delete(
-  "/api/notifications/clear-all",
-  requireAuth,
-  async (req, res) => {
+  app.delete("/api/notifications/clear-all", requireAuth, async (req, res) => {
     try {
       await storage.clearAllNotifications(req.session.userId!);
       res.json({ success: true });
     } catch {
       res.status(500).json({ message: "Failed to clear notifications" });
     }
-  },
-);
+  });
 
   // ========== ADMIN STATS & USERS ==========
   app.get(
