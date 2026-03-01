@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Card } from "./ui/card";
 import { Button } from "./ui/button";
-import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import type { Question } from "../lib/api";
 
 interface QuizDetailsFormProps {
@@ -11,13 +11,11 @@ interface QuizDetailsFormProps {
     description: string | null;
     duration: number;
     subjectId: string;
-    allowReview: boolean;
   }) => void;
   onCancel: () => void;
   initialTitle?: string;
   initialDescription?: string;
   initialDuration?: number;
-  initialAllowReview?: boolean;
   isEditMode?: boolean;
   isSaving?: boolean;
 }
@@ -29,14 +27,12 @@ export function QuizDetailsForm({
   initialTitle = "",
   initialDescription = "",
   initialDuration = 30,
-  initialAllowReview = false,
   isEditMode = false,
   isSaving = false,
 }: QuizDetailsFormProps) {
   const [title, setTitle] = useState(initialTitle);
   const [description, setDescription] = useState(initialDescription);
   const [duration, setDuration] = useState(initialDuration);
-  const [allowReview, setAllowReview] = useState(initialAllowReview);
 
   const handleSubmit = () => {
     if (!title.trim()) {
@@ -45,10 +41,10 @@ export function QuizDetailsForm({
     }
     onComplete({
       title: title.trim(),
-      description: description.trim() || null, // null when empty — truly optional
+      description: description.trim() || null,
       duration,
       subjectId: "",
-      allowReview, // always passed, controlled by toggle
+      // allowReview intentionally omitted — controlled from quiz list page
     });
   };
 
@@ -77,7 +73,7 @@ export function QuizDetailsForm({
           />
         </div>
 
-        {/* Description — optional, no asterisk, no validation */}
+        {/* Description — optional */}
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1.5">
             Description{" "}
@@ -106,48 +102,25 @@ export function QuizDetailsForm({
           />
         </div>
 
-        {/* Allow Review Toggle */}
-        <div
-          className={`flex items-start justify-between gap-4 p-4 rounded-lg border-2 cursor-pointer transition-all select-none ${
-            allowReview
-              ? "border-green-300 bg-green-50"
-              : "border-slate-200 bg-slate-50"
-          }`}
-          onClick={() => setAllowReview((prev) => !prev)}
-        >
-          <div className="flex items-start gap-3">
-            {allowReview ? (
-              <Eye className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
-            ) : (
-              <EyeOff className="w-5 h-5 text-slate-400 mt-0.5 flex-shrink-0" />
-            )}
-            <div>
-              <p
-                className={`text-sm font-semibold ${allowReview ? "text-green-800" : "text-slate-600"}`}
-              >
-                Allow Answer Review
-              </p>
-              <p
-                className={`text-xs mt-0.5 ${allowReview ? "text-green-600" : "text-slate-400"}`}
-              >
-                {allowReview
-                  ? "Students can review correct answers after submitting"
-                  : "Students will only see their score, not the answers"}
-              </p>
-            </div>
-          </div>
-          {/* Toggle pill */}
-          <div
-            className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 mt-0.5 ${
-              allowReview ? "bg-green-500" : "bg-slate-300"
-            }`}
+        {/* Info note about review setting */}
+        <div className="flex items-start gap-3 p-4 rounded-lg bg-blue-50 border border-blue-200">
+          <svg
+            className="w-5 h-5 text-blue-500 mt-0.5 flex-shrink-0"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
           >
-            <div
-              className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
-                allowReview ? "translate-x-5" : "translate-x-0.5"
-              }`}
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
             />
-          </div>
+          </svg>
+          <p className="text-sm text-blue-700">
+            <span className="font-semibold">Answer Review</span> can be turned
+            on or off from the quiz list after saving.
+          </p>
         </div>
 
         {/* Summary */}
@@ -165,12 +138,8 @@ export function QuizDetailsForm({
             </span>
           </div>
           <div className="flex justify-between">
-            <span>Answer Review:</span>
-            <span
-              className={`font-medium ${allowReview ? "text-green-600" : "text-slate-400"}`}
-            >
-              {allowReview ? "Enabled" : "Disabled"}
-            </span>
+            <span>Duration:</span>
+            <span className="font-medium text-slate-900">{duration} min</span>
           </div>
         </div>
 

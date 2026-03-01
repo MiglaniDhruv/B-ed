@@ -14,8 +14,6 @@ import {
   Download,
   FileText,
   Loader2,
-  Eye,
-  EyeOff,
 } from "lucide-react";
 import { QuestionBankSelector } from "./question-bank-selector";
 import { useAdminQuestions, useQuizzes } from "../lib/hooks";
@@ -23,7 +21,7 @@ import { api } from "../lib/api";
 import type { Question, Quiz } from "../lib/api";
 
 export interface QuizData {
-  basicInfo: { title: string; duration: number; allowReview: boolean };
+  basicInfo: { title: string; duration: number };
   questions: {
     id: string;
     questionText: string;
@@ -240,11 +238,10 @@ export function QuizBuilder({
   const [showCancelWarning, setShowCancelWarning] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // ── allowReview removed from builder — managed from the quiz list page ──
   const [basicInfo, setBasicInfo] = useState({
     title: editingQuiz?.title ?? "",
     duration: editingQuiz?.duration ?? 30,
-    // Default OFF for existing quizzes (null = not set = treat as false), new quizzes default OFF
-    allowReview: editingQuiz?.allowReview ?? false,
   });
 
   const [activeQuizId, setActiveQuizId] = useState<string | null>(
@@ -600,7 +597,8 @@ export function QuizBuilder({
           title: basicInfo.title,
           duration: basicInfo.duration,
           totalMarks: totalMarksValue,
-          allowReview: basicInfo.allowReview,
+          // allowReview defaults to false — admin sets it from quiz list page
+          allowReview: false,
           isActive: false,
         } as any);
         quizId = newQuiz.id;
@@ -620,7 +618,6 @@ export function QuizBuilder({
           title: basicInfo.title,
           duration: basicInfo.duration,
           totalMarks: totalMarksValue,
-          allowReview: basicInfo.allowReview,
         });
       }
     } catch (err: any) {
@@ -702,55 +699,25 @@ export function QuizBuilder({
                 />
               </div>
 
-              {/* ── Allow Review Toggle ─────────────────────────────────────── */}
-              <div
-                className={`flex items-start justify-between gap-4 p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                  basicInfo.allowReview
-                    ? "border-green-300 bg-green-50"
-                    : "border-slate-200 bg-slate-50"
-                }`}
-                onClick={() =>
-                  setBasicInfo({
-                    ...basicInfo,
-                    allowReview: !basicInfo.allowReview,
-                  })
-                }
-              >
-                <div className="flex items-start gap-3">
-                  {basicInfo.allowReview ? (
-                    <Eye className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
-                  ) : (
-                    <EyeOff className="w-5 h-5 text-slate-400 mt-0.5 flex-shrink-0" />
-                  )}
-                  <div>
-                    <p
-                      className={`text-sm font-semibold ${basicInfo.allowReview ? "text-green-800" : "text-slate-600"}`}
-                    >
-                      Allow Answer Review
-                    </p>
-                    <p
-                      className={`text-xs mt-0.5 ${basicInfo.allowReview ? "text-green-600" : "text-slate-400"}`}
-                    >
-                      {basicInfo.allowReview
-                        ? "Students can review correct answers after submitting"
-                        : "Students will only see their score, not the answers"}
-                    </p>
-                  </div>
-                </div>
-                {/* Toggle switch */}
-                <div
-                  className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 mt-0.5 ${
-                    basicInfo.allowReview ? "bg-green-500" : "bg-slate-300"
-                  }`}
+              {/* Info note about review setting */}
+              <div className="flex items-start gap-3 p-4 rounded-lg bg-blue-50 border border-blue-200">
+                <svg
+                  className="w-5 h-5 text-blue-500 mt-0.5 flex-shrink-0"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
                 >
-                  <div
-                    className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
-                      basicInfo.allowReview
-                        ? "translate-x-5"
-                        : "translate-x-0.5"
-                    }`}
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                   />
-                </div>
+                </svg>
+                <p className="text-sm text-blue-700">
+                  <span className="font-semibold">Answer Review</span> can be
+                  turned on or off from the quiz list after saving.
+                </p>
               </div>
 
               {/* Buttons */}
@@ -841,19 +808,6 @@ export function QuizBuilder({
                   · {questions.length} question
                   {questions.length !== 1 ? "s" : ""} · {totalMarks} marks
                 </span>
-              </p>
-              {/* Show review setting reminder */}
-              <p
-                className={`text-xs mt-0.5 flex items-center gap-1 ${basicInfo.allowReview ? "text-green-600" : "text-slate-400"}`}
-              >
-                {basicInfo.allowReview ? (
-                  <Eye className="w-3 h-3" />
-                ) : (
-                  <EyeOff className="w-3 h-3" />
-                )}
-                {basicInfo.allowReview
-                  ? "Answer review enabled"
-                  : "Answer review disabled"}
               </p>
               {activeQuizId && (
                 <p className="text-xs text-emerald-600 mt-0.5">

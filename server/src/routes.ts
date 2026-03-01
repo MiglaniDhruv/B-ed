@@ -129,47 +129,10 @@ function requireAdminAuth(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
-// ─── requireValidSession ──────────────────────────────────────────────────────
-// async function requireValidSession(
-//   req: Request,
-//   res: Response,
-//   next: NextFunction,
-// ) {
-//   if (req.headers.authorization?.startsWith("Bearer ")) return next();
-
-//   const userId = req.session.userId;
-//   const sessionToken = req.session.sessionToken;
-//   if (!userId || !sessionToken)
-//     return res.status(401).json({ message: "Not authenticated" });
-
-//   try {
-//     let storedToken: string | null | undefined = null;
-//     const user = await storage.getUser(userId);
-//     if (user) {
-//       storedToken = (user as any).sessionToken;
-//     } else {
-//       const student = await storage.getStudentById(userId);
-//       if (student) storedToken = (student as any).sessionToken;
-//     }
-//     if (!storedToken || storedToken !== sessionToken) {
-//       return res.status(401).json({
-//         message:
-//           "Session expired. Your account was logged in from another device.",
-//         code: "SESSION_INVALIDATED",
-//       });
-//     }
-//     next();
-//   } catch {
-//     return res.status(500).json({ message: "Session validation failed" });
-//   }
-// }
-
 export async function registerRoutes(app: Express): Promise<Server> {
   app.set("trust proxy", 1);
 
   // ─── Session middleware ────────────────────────────────────────────────────
-  // NOTE: PDF upload route is registered AFTER session so requireAdminAuth
-  // can access req.session if needed, but JWT path works without session too.
   app.use(
     session({
       secret:
@@ -187,8 +150,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   );
 
   // ========== PDF UPLOAD TO FIREBASE STORAGE ==========
-  // IMPORTANT: This must be registered AFTER session but uses multer directly
-  // (bypasses express.json body parser via the multipart content-type check in index.ts)
   app.post(
     "/api/admin/upload-pdf",
     requireAdminAuth,
@@ -213,7 +174,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           },
         });
 
-        // Make publicly accessible so anyone with the URL can view it
         await fileRef.makePublic();
 
         const url = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
@@ -226,40 +186,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
   );
 
   // ========== USER MANAGEMENT ==========
-  app.post(
-    "/api/admin/users",
-    requireAdminAuth,
-    // requireValidSession,
-    async (req, res) => {
-      try {
-        const data = registerSchema.parse(req.body);
-        const existingEmail = await storage.getUserByEmail(data.email);
-        if (existingEmail)
-          return res.status(400).json({ message: "Email already registered" });
-        const existingUsername = await storage.getUserByUsername(data.username);
-        if (existingUsername)
-          return res.status(400).json({ message: "Username already taken" });
-        const hashedPassword = await bcrypt.hash(data.password, 12);
-        const user = await storage.createUser({
-          ...data,
-          password: hashedPassword,
-          phone: (data as any).phone || null,
-          displayName: data.displayName || data.username,
-        });
-        const { password: _, ...safeUser } = user;
-        res.json({ user: safeUser });
-      } catch (err) {
-        if (err instanceof z.ZodError)
-          return res.status(400).json({ message: err.errors[0].message });
-        res.status(500).json({ message: "Failed to create user" });
-      }
-    },
-  );
+  app.post("/api/admin/users", requireAdminAuth, async (req, res) => {
+    try {
+      const data = registerSchema.parse(req.body);
+      const existingEmail = await storage.getUserByEmail(data.email);
+      if (existingEmail)
+        return res.status(400).json({ message: "Email already registered" });
+      const existingUsername = await storage.getUserByUsername(data.username);
+      if (existingUsername)
+        return res.status(400).json({ message: "Username already taken" });
+      const hashedPassword = await bcrypt.hash(data.password, 12);
+      const user = await storage.createUser({
+        ...data,
+        password: hashedPassword,
+        phone: (data as any).phone || null,
+        displayName: data.displayName || data.username,
+      });
+      const { password: _, ...safeUser } = user;
+      res.json({ user: safeUser });
+    } catch (err) {
+      if (err instanceof z.ZodError)
+        return res.status(400).json({ message: err.errors[0].message });
+      res.status(500).json({ message: "Failed to create user" });
+    }
+  });
 
   app.put(
     "/api/admin/users/:id/reset-password",
     requireAdminAuth,
-    // requireValidSession,
     async (req, res) => {
       try {
         const { newPassword } = req.body;
@@ -279,19 +233,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     },
   );
 
-  app.delete(
-    "/api/admin/users/:id",
-    requireAdminAuth,
-    // requireValidSession,
-    async (req, res) => {
-      try {
-        await storage.deleteUser(req.params.id);
-        res.json({ success: true });
-      } catch {
-        res.status(500).json({ message: "Failed to delete user" });
-      }
-    },
-  );
+  app.delete("/api/admin/users/:id", requireAdminAuth, async (req, res) => {
+    try {
+      await storage.deleteUser(req.params.id);
+      res.json({ success: true });
+    } catch {
+      res.status(500).json({ message: "Failed to delete user" });
+    }
+  });
 
   // ========== AUTHENTICATION ==========
   app.post("/api/auth/login", async (req, res) => {
@@ -328,7 +277,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!user)
         return res.json({
           message: "If that email exists, a reset link has been sent.",
-          resetLink: null, // 👈 add karo
+          resetLink: null,
         });
       const token = crypto.randomBytes(32).toString("hex");
       const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
@@ -342,7 +291,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(500).json({ message: "Failed to send reset email." });
       res.json({
         message: "If that email exists, a reset link has been sent.",
-        resetLink: resetLink, // ✅
+        resetLink: resetLink,
       });
     } catch {
       res.status(500).json({ message: "Something went wrong" });
@@ -420,59 +369,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return res.status(401).json({ message: "User not found" });
   });
 
-  app.put(
-    "/api/auth/profile",
-    requireAdminAuth,
-    // requireValidSession,
-    async (req, res) => {
-      try {
-        const user = await storage.updateUser(req.session.userId!, {
-          displayName: req.body.displayName,
-          phone: req.body.phone,
-          darkMode: req.body.darkMode,
-        });
-        if (!user) return res.status(404).json({ message: "User not found" });
-        const { password: _, ...safeUser } = user;
-        res.json({ user: safeUser });
-      } catch {
-        res.status(500).json({ message: "Update failed" });
-      }
-    },
-  );
+  app.put("/api/auth/profile", requireAdminAuth, async (req, res) => {
+    try {
+      const user = await storage.updateUser(req.session.userId!, {
+        displayName: req.body.displayName,
+        phone: req.body.phone,
+        darkMode: req.body.darkMode,
+      });
+      if (!user) return res.status(404).json({ message: "User not found" });
+      const { password: _, ...safeUser } = user;
+      res.json({ user: safeUser });
+    } catch {
+      res.status(500).json({ message: "Update failed" });
+    }
+  });
 
   // ========== FCM TOKEN ==========
-  app.post(
-    "/api/student/fcm-token",
-    requireAuth,
-    // requireValidSession,
-    async (req, res) => {
-      try {
-        const { token } = req.body;
-        if (!token)
-          return res.status(400).json({ message: "FCM token required" });
-        await saveFcmToken(req.session.userId!, token);
-        res.json({ success: true });
-      } catch (err) {
-        console.error("FCM token save error:", err);
-        res.status(500).json({ message: "Failed to save FCM token" });
-      }
-    },
-  );
+  app.post("/api/student/fcm-token", requireAuth, async (req, res) => {
+    try {
+      const { token } = req.body;
+      if (!token)
+        return res.status(400).json({ message: "FCM token required" });
+      await saveFcmToken(req.session.userId!, token);
+      res.json({ success: true });
+    } catch (err) {
+      console.error("FCM token save error:", err);
+      res.status(500).json({ message: "Failed to save FCM token" });
+    }
+  });
 
-  app.delete(
-    "/api/student/fcm-token",
-    requireAuth,
-    // requireValidSession,
-    async (req, res) => {
-      try {
-        const { token } = req.body;
-        if (token) await removeFcmToken(token);
-        res.json({ success: true });
-      } catch {
-        res.status(500).json({ message: "Failed to remove FCM token" });
-      }
-    },
-  );
+  app.delete("/api/student/fcm-token", requireAuth, async (req, res) => {
+    try {
+      const { token } = req.body;
+      if (token) await removeFcmToken(token);
+      res.json({ success: true });
+    } catch {
+      res.status(500).json({ message: "Failed to remove FCM token" });
+    }
+  });
 
   // ========== STUDENT AUTH ==========
   app.post("/api/student/login", async (req, res) => {
@@ -513,23 +447,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ========== STUDENT MANAGEMENT ==========
-  app.get(
-    "/api/admin/students",
-    requireAdminAuth,
-    // requireValidSession,
-    async (_req, res) => {
-      try {
-        res.json(await storage.getStudents());
-      } catch {
-        res.status(500).json({ message: "Failed to fetch students" });
-      }
-    },
-  );
+  app.get("/api/admin/students", requireAdminAuth, async (_req, res) => {
+    try {
+      res.json(await storage.getStudents());
+    } catch {
+      res.status(500).json({ message: "Failed to fetch students" });
+    }
+  });
 
   app.get(
     "/api/admin/students/with-passwords",
     requireAdminAuth,
-    // requireValidSession,
     async (_req, res) => {
       try {
         res.json(await storage.getStudentsWithPasswords());
@@ -543,7 +471,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post(
     "/api/admin/students/bulk",
     requireAdminAuth,
-    // requireValidSession,
     async (req, res) => {
       try {
         const { students } = req.body as {
@@ -576,74 +503,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
     },
   );
 
-app.post("/api/admin/students", requireAdminAuth, async (req, res) => {
-  try {
-    let { name, email, phone, password } = req.body;
+  app.post("/api/admin/students", requireAdminAuth, async (req, res) => {
+    try {
+      let { name, email, phone, password } = req.body;
 
-    email = email?.trim() || null;
-    phone = phone?.trim() || null;
+      email = email?.trim() || null;
+      phone = phone?.trim() || null;
 
-    if (!name || !password) {
-      return res.status(400).json({ message: "Name and password required" });
-    }
+      if (!name || !password) {
+        return res.status(400).json({ message: "Name and password required" });
+      }
 
-    if (!email && !phone) {
-      return res.status(400).json({
-        message: "Either email or phone number is required",
-      });
-    }
-
-    if (password.length < 6) {
-      return res.status(400).json({
-        message: "Password must be at least 6 characters",
-      });
-    }
-
-    // ✅ Check email only if provided
-    if (email) {
-      const existing = await storage.getStudentByEmail(email);
-      if (existing) {
+      if (!email && !phone) {
         return res.status(400).json({
-          message: "A student with this email already exists",
+          message: "Either email or phone number is required",
         });
       }
-    }
 
-    // ✅ Check phone only if provided
-    if (phone) {
-      const existingPhone = await storage.getStudentByPhone(phone);
-      if (existingPhone) {
+      if (password.length < 6) {
         return res.status(400).json({
-          message: "A student with this phone already exists",
+          message: "Password must be at least 6 characters",
         });
       }
+
+      if (email) {
+        const existing = await storage.getStudentByEmail(email);
+        if (existing) {
+          return res.status(400).json({
+            message: "A student with this email already exists",
+          });
+        }
+      }
+
+      if (phone) {
+        const existingPhone = await storage.getStudentByPhone(phone);
+        if (existingPhone) {
+          return res.status(400).json({
+            message: "A student with this phone already exists",
+          });
+        }
+      }
+
+      const hashedPassword = await bcrypt.hash(password, 12);
+
+      const student = await storage.createStudent(
+        {
+          name,
+          email: email ?? "",
+          phone: phone ?? "",
+          password: hashedPassword,
+          enrollmentNumber: `ENR${Date.now()}`,
+          status: "approved",
+        },
+        password,
+      );
+
+      res.json(student);
+    } catch (err) {
+      console.error("Create student error FULL:", err);
+      res.status(500).json({ message: "Failed to create student" });
     }
-
-    const hashedPassword = await bcrypt.hash(password, 12);
-
-    const student = await storage.createStudent(
-      {
-        name,
-        email: email ?? "",
-        phone: phone ?? "",
-        password: hashedPassword,
-        enrollmentNumber: `ENR${Date.now()}`,
-        status: "approved",
-      },
-      password,
-    );
-
-    res.json(student);
-  } catch (err) {
-    console.error("Create student error FULL:", err);
-    res.status(500).json({ message: "Failed to create student" });
-  }
-});
+  });
 
   app.put(
     "/api/admin/students/:id/reset-password",
     requireAdminAuth,
-    // requireValidSession,
     async (req, res) => {
       try {
         const { newPassword } = req.body;
@@ -668,10 +592,7 @@ app.post("/api/admin/students", requireAdminAuth, async (req, res) => {
     },
   );
 
-app.put(
-  "/api/admin/students/:id",
-  requireAdminAuth,
-  async (req, res) => {
+  app.put("/api/admin/students/:id", requireAdminAuth, async (req, res) => {
     try {
       const { name, email, phone } = req.body;
 
@@ -697,13 +618,11 @@ app.put(
         .status(500)
         .json({ message: err.message || "Failed to update student" });
     }
-  },
-);
+  });
 
   app.put(
     "/api/admin/students/:id/status",
     requireAdminAuth,
-    // requireValidSession,
     async (req, res) => {
       try {
         const { status } = req.body;
@@ -720,7 +639,6 @@ app.put(
   app.delete(
     "/api/admin/students/:id",
     requireAdminAuth,
-    // requireValidSession,
     async (req, res) => {
       try {
         await storage.deleteStudent(req.params.id);
@@ -732,49 +650,43 @@ app.put(
   );
 
   // ========== SEMESTERS ==========
-  app.get(
-    "/api/semesters",
-    requireAuth,
-    // requireValidSession,
-    async (_req, res) => {
-      try {
-        const semesters = [
-          { id: 1, title: "Semester 1", name: "Semester 1", number: 1 },
-          { id: 2, title: "Semester 2", name: "Semester 2", number: 2 },
-          { id: 3, title: "Semester 3", name: "Semester 3", number: 3 },
-          { id: 4, title: "Semester 4", name: "Semester 4", number: 4 },
-          {
-            id: 5,
-            title: "Exam Preparation",
-            name: "Exam Preparation",
-            number: 5,
-          },
-        ];
-        const semestersWithCounts = await Promise.all(
-          semesters.map(async (sem) => {
-            const stats = await storage.getSemesterStats(sem.number);
-            return { ...sem, ...stats };
-          }),
-        );
-        res.json(semestersWithCounts);
-      } catch (err) {
-        console.error("Get semesters error:", err);
-        res.status(500).json({ message: "Failed to fetch semesters" });
-      }
-    },
-  );
+  app.get("/api/semesters", requireAuth, async (_req, res) => {
+    try {
+      const semesters = [
+        { id: 1, title: "Semester 1", name: "Semester 1", number: 1 },
+        { id: 2, title: "Semester 2", name: "Semester 2", number: 2 },
+        { id: 3, title: "Semester 3", name: "Semester 3", number: 3 },
+        { id: 4, title: "Semester 4", name: "Semester 4", number: 4 },
+        {
+          id: 5,
+          title: "Exam Preparation",
+          name: "Exam Preparation",
+          number: 5,
+        },
+      ];
+      const semestersWithCounts = await Promise.all(
+        semesters.map(async (sem) => {
+          const stats = await storage.getSemesterStats(sem.number);
+          return { ...sem, ...stats };
+        }),
+      );
+      res.json(semestersWithCounts);
+    } catch (err) {
+      console.error("Get semesters error:", err);
+      res.status(500).json({ message: "Failed to fetch semesters" });
+    }
+  });
 
   app.get(
     "/api/semesters/:semesterNumber/subjects",
     requireAuth,
-    // requireValidSession,
     async (req, res) => {
       try {
         const semesterNumber = parseInt(req.params.semesterNumber);
         if (isNaN(semesterNumber) || semesterNumber < 1 || semesterNumber > 5)
           return res
             .status(400)
-            .json({ message: "Invalid semester number. Must be 1-5  ." });
+            .json({ message: "Invalid semester number. Must be 1-5." });
         res.json(await storage.getSubjectsBySemester(semesterNumber));
       } catch (err) {
         console.error("Get subjects by semester error:", err);
@@ -784,81 +696,60 @@ app.put(
   );
 
   // ========== SUBJECTS ==========
-  app.get(
-    "/api/subjects",
-    requireAuth,
-    // requireValidSession,
-    async (_req, res) => {
-      try {
-        res.json(await storage.getSubjects());
-      } catch {
-        res.status(500).json({ message: "Failed to fetch subjects" });
-      }
-    },
-  );
-  app.get(
-    "/api/subjects/:id",
-    requireAuth,
-    // requireValidSession,
-    async (req, res) => {
-      try {
-        const subject = await storage.getSubjectById(req.params.id);
-        if (!subject)
-          return res.status(404).json({ message: "Subject not found" });
-        res.json(subject);
-      } catch {
-        res.status(500).json({ message: "Failed to fetch subject" });
-      }
-    },
-  );
-  app.post(
-    "/api/admin/subjects",
-    requireAdminAuth,
-    // requireValidSession,
-    async (req, res) => {
-      try {
-        const data = insertSubjectSchema.parse(req.body);
-        if (data.semesterNumber < 1 || data.semesterNumber > 5)
-          return res
-            .status(400)
-            .json({ message: "Semester number must be between 1 and 5" });
-        res.json(await storage.createSubject(data));
-      } catch (err) {
-        if (err instanceof z.ZodError)
-          return res.status(400).json({ message: err.errors[0].message });
-        res.status(500).json({ message: "Failed to create subject" });
-      }
-    },
-  );
-  app.put(
-    "/api/admin/subjects/:id",
-    requireAdminAuth,
-    // requireValidSession,
-    async (req, res) => {
-      try {
-        const data = insertSubjectSchema.partial().parse(req.body);
-        if (
-          data.semesterNumber !== undefined &&
-          (data.semesterNumber < 1 || data.semesterNumber > 4)
-        )
-          return res
-            .status(400)
-            .json({ message: "Semester number must be between 1 and 4" });
-        const subject = await storage.updateSubject(req.params.id, data);
-        if (!subject)
-          return res.status(404).json({ message: "Subject not found" });
-        res.json(subject);
-      } catch (err) {
-        if (err instanceof z.ZodError)
-          return res.status(400).json({ message: err.errors[0].message });
-        res.status(500).json({ message: "Failed to update subject" });
-      }
-    },
-  );
+  app.get("/api/subjects", requireAuth, async (_req, res) => {
+    try {
+      res.json(await storage.getSubjects());
+    } catch {
+      res.status(500).json({ message: "Failed to fetch subjects" });
+    }
+  });
+  app.get("/api/subjects/:id", requireAuth, async (req, res) => {
+    try {
+      const subject = await storage.getSubjectById(req.params.id);
+      if (!subject)
+        return res.status(404).json({ message: "Subject not found" });
+      res.json(subject);
+    } catch {
+      res.status(500).json({ message: "Failed to fetch subject" });
+    }
+  });
+  app.post("/api/admin/subjects", requireAdminAuth, async (req, res) => {
+    try {
+      const data = insertSubjectSchema.parse(req.body);
+      if (data.semesterNumber < 1 || data.semesterNumber > 5)
+        return res
+          .status(400)
+          .json({ message: "Semester number must be between 1 and 5" });
+      res.json(await storage.createSubject(data));
+    } catch (err) {
+      if (err instanceof z.ZodError)
+        return res.status(400).json({ message: err.errors[0].message });
+      res.status(500).json({ message: "Failed to create subject" });
+    }
+  });
+  app.put("/api/admin/subjects/:id", requireAdminAuth, async (req, res) => {
+    try {
+      const data = insertSubjectSchema.partial().parse(req.body);
+      if (
+        data.semesterNumber !== undefined &&
+        (data.semesterNumber < 1 || data.semesterNumber > 4)
+      )
+        return res
+          .status(400)
+          .json({ message: "Semester number must be between 1 and 4" });
+      const subject = await storage.updateSubject(req.params.id, data);
+      if (!subject)
+        return res.status(404).json({ message: "Subject not found" });
+      res.json(subject);
+    } catch (err) {
+      if (err instanceof z.ZodError)
+        return res.status(400).json({ message: err.errors[0].message });
+      res.status(500).json({ message: "Failed to update subject" });
+    }
+  });
   app.delete(
     "/api/admin/subjects/:id",
     requireAdminAuth,
-    // requireValidSession,
     async (req, res) => {
       try {
         await storage.deleteSubject(req.params.id);
@@ -868,113 +759,77 @@ app.put(
       }
     },
   );
-  app.get(
-    "/api/subjects/:id/units",
-    requireAuth,
-    // requireValidSession,
-    async (req, res) => {
-      try {
-        res.json(await storage.getUnitsBySubject(req.params.id));
-      } catch {
-        res.status(500).json({ message: "Failed to fetch chapters" });
-      }
-    },
-  );
-  app.get(
-    "/api/categories/:id/units",
-    requireAuth,
-    // requireValidSession,
-    async (req, res) => {
-      try {
-        res.json(await storage.getUnitsBySubject(req.params.id));
-      } catch {
-        res.status(500).json({ message: "Failed to fetch chapters" });
-      }
-    },
-  );
+  app.get("/api/subjects/:id/units", requireAuth, async (req, res) => {
+    try {
+      res.json(await storage.getUnitsBySubject(req.params.id));
+    } catch {
+      res.status(500).json({ message: "Failed to fetch chapters" });
+    }
+  });
+  app.get("/api/categories/:id/units", requireAuth, async (req, res) => {
+    try {
+      res.json(await storage.getUnitsBySubject(req.params.id));
+    } catch {
+      res.status(500).json({ message: "Failed to fetch chapters" });
+    }
+  });
 
   // ========== UNITS ==========
-  app.post(
-    "/api/admin/units",
-    requireAdminAuth,
-    // requireValidSession,
-    async (req, res) => {
-      try {
-        res.json(await storage.createUnit(insertUnitSchema.parse(req.body)));
-      } catch (err) {
-        if (err instanceof z.ZodError)
-          return res.status(400).json({ message: err.errors[0].message });
-        res.status(500).json({ message: "Failed to create chapter" });
-      }
-    },
-  );
-  app.put(
-    "/api/admin/units/:id",
-    requireAdminAuth,
-    // requireValidSession,
-    async (req, res) => {
-      try {
-        const unit = await storage.updateUnit(
-          req.params.id,
-          insertUnitSchema.partial().parse(req.body),
-        );
-        if (!unit)
-          return res.status(404).json({ message: "Chapter not found" });
-        res.json(unit);
-      } catch (err) {
-        if (err instanceof z.ZodError)
-          return res.status(400).json({ message: err.errors[0].message });
-        res.status(500).json({ message: "Failed to update chapter" });
-      }
-    },
-  );
-  app.delete(
-    "/api/admin/units/:id",
-    requireAdminAuth,
-    // requireValidSession,
-    async (req, res) => {
-      try {
-        await storage.deleteUnit(req.params.id);
-        res.json({ success: true });
-      } catch {
-        res.status(500).json({ message: "Failed to delete chapter" });
-      }
-    },
-  );
+  app.post("/api/admin/units", requireAdminAuth, async (req, res) => {
+    try {
+      res.json(await storage.createUnit(insertUnitSchema.parse(req.body)));
+    } catch (err) {
+      if (err instanceof z.ZodError)
+        return res.status(400).json({ message: err.errors[0].message });
+      res.status(500).json({ message: "Failed to create chapter" });
+    }
+  });
+  app.put("/api/admin/units/:id", requireAdminAuth, async (req, res) => {
+    try {
+      const unit = await storage.updateUnit(
+        req.params.id,
+        insertUnitSchema.partial().parse(req.body),
+      );
+      if (!unit)
+        return res.status(404).json({ message: "Chapter not found" });
+      res.json(unit);
+    } catch (err) {
+      if (err instanceof z.ZodError)
+        return res.status(400).json({ message: err.errors[0].message });
+      res.status(500).json({ message: "Failed to update chapter" });
+    }
+  });
+  app.delete("/api/admin/units/:id", requireAdminAuth, async (req, res) => {
+    try {
+      await storage.deleteUnit(req.params.id);
+      res.json({ success: true });
+    } catch {
+      res.status(500).json({ message: "Failed to delete chapter" });
+    }
+  });
 
   // ========== STUDY MATERIALS ==========
-  app.get(
-    "/api/study-materials",
-    requireAuth,
-    // requireValidSession,
-    async (req, res) => {
-      try {
-        const unitId = req.query.unitId as string | undefined;
-        if (unitId)
-          return res.json(await storage.getStudyMaterialsByUnit(unitId));
-        res.json([]);
-      } catch {
-        res.status(500).json({ message: "Failed to fetch study materials" });
-      }
-    },
-  );
-  app.get(
-    "/api/units/:id/materials",
-    requireAuth,
-    // requireValidSession,
-    async (req, res) => {
-      try {
-        res.json(await storage.getStudyMaterialsByUnit(req.params.id));
-      } catch {
-        res.status(500).json({ message: "Failed to fetch materials" });
-      }
-    },
-  );
+  app.get("/api/study-materials", requireAuth, async (req, res) => {
+    try {
+      const unitId = req.query.unitId as string | undefined;
+      if (unitId)
+        return res.json(await storage.getStudyMaterialsByUnit(unitId));
+      res.json([]);
+    } catch {
+      res.status(500).json({ message: "Failed to fetch study materials" });
+    }
+  });
+  app.get("/api/units/:id/materials", requireAuth, async (req, res) => {
+    try {
+      res.json(await storage.getStudyMaterialsByUnit(req.params.id));
+    } catch {
+      res.status(500).json({ message: "Failed to fetch materials" });
+    }
+  });
 
   app.post(
     "/api/admin/study-materials",
     requireAdminAuth,
-    // requireValidSession,
     async (req, res) => {
       try {
         const data = insertStudyMaterialSchema.parse(req.body);
@@ -1006,7 +861,6 @@ app.put(
   app.put(
     "/api/admin/study-materials/:id",
     requireAdminAuth,
-    // requireValidSession,
     async (req, res) => {
       try {
         const mat = await storage.updateStudyMaterial(
@@ -1026,7 +880,6 @@ app.put(
   app.delete(
     "/api/admin/study-materials/:id",
     requireAdminAuth,
-    // requireValidSession,
     async (req, res) => {
       try {
         await storage.deleteStudyMaterial(req.params.id);
@@ -1038,63 +891,47 @@ app.put(
   );
 
   // ========== QUIZZES ==========
-  app.get(
-    "/api/quizzes",
-    requireAuth,
-    // requireValidSession,
-    async (req, res) => {
-      try {
-        const quizList = await storage.getAllQuizzes();
-        const authHeader = req.headers.authorization;
-        let isStudent = false;
-        if (authHeader?.startsWith("Bearer ")) {
-          try {
-            const decoded = jwt.verify(authHeader.slice(7), JWT_SECRET) as {
-              userId?: string;
-              studentId?: string;
-            };
-            isStudent = !!decoded.studentId && !decoded.userId;
-          } catch {}
-        }
-        res.json(
-          isStudent ? quizList.filter((q) => q.isActive === true) : quizList,
-        );
-      } catch {
-        res.status(500).json({ message: "Failed to fetch quizzes" });
+  app.get("/api/quizzes", requireAuth, async (req, res) => {
+    try {
+      const quizList = await storage.getAllQuizzes();
+      const authHeader = req.headers.authorization;
+      let isStudent = false;
+      if (authHeader?.startsWith("Bearer ")) {
+        try {
+          const decoded = jwt.verify(authHeader.slice(7), JWT_SECRET) as {
+            userId?: string;
+            studentId?: string;
+          };
+          isStudent = !!decoded.studentId && !decoded.userId;
+        } catch {}
       }
-    },
-  );
-  app.get(
-    "/api/quizzes/:id",
-    requireAuth,
-    // requireValidSession,
-    async (req, res) => {
-      try {
-        const quiz = await storage.getQuizById(req.params.id);
-        if (!quiz) return res.status(404).json({ message: "Quiz not found" });
-        res.json(quiz);
-      } catch {
-        res.status(500).json({ message: "Failed to fetch quiz" });
-      }
-    },
-  );
-  app.get(
-    "/api/quizzes/:id/questions",
-    requireAuth,
-    // requireValidSession,
-    async (req, res) => {
-      try {
-        const qs = await storage.getQuestionsByQuiz(req.params.id);
-        res.json(qs.map(({ correctAnswer, ...q }) => q));
-      } catch {
-        res.status(500).json({ message: "Failed to fetch questions" });
-      }
-    },
-  );
+      res.json(
+        isStudent ? quizList.filter((q) => q.isActive === true) : quizList,
+      );
+    } catch {
+      res.status(500).json({ message: "Failed to fetch quizzes" });
+    }
+  });
+  app.get("/api/quizzes/:id", requireAuth, async (req, res) => {
+    try {
+      const quiz = await storage.getQuizById(req.params.id);
+      if (!quiz) return res.status(404).json({ message: "Quiz not found" });
+      res.json(quiz);
+    } catch {
+      res.status(500).json({ message: "Failed to fetch quiz" });
+    }
+  });
+  app.get("/api/quizzes/:id/questions", requireAuth, async (req, res) => {
+    try {
+      const qs = await storage.getQuestionsByQuiz(req.params.id);
+      res.json(qs.map(({ correctAnswer, ...q }) => q));
+    } catch {
+      res.status(500).json({ message: "Failed to fetch questions" });
+    }
+  });
   app.get(
     "/api/quizzes/:id/check-attempt",
     requireAuth,
-    // requireValidSession,
     async (req, res) => {
       try {
         const existing = await storage.getUserAttemptForQuiz(
@@ -1107,192 +944,139 @@ app.put(
       }
     },
   );
-  app.post(
-    "/api/quizzes/:id/submit",
-    requireAuth,
-    // requireValidSession,
-    async (req, res) => {
-      try {
-        const quizId = req.params.id;
-        const userId = req.session.userId!;
-        const existing = await storage.getUserAttemptForQuiz(userId, quizId);
-        if (existing)
-          return res.status(400).json({
-            message: "You have already attempted this quiz.",
-            code: "ALREADY_ATTEMPTED",
-            attempt: existing,
-          });
-        const { answers, timeTaken } = req.body;
-        const allQuestions = await storage.getQuestionsByQuiz(quizId);
-        if (allQuestions.length === 0)
-          return res
-            .status(400)
-            .json({ message: "This quiz has no questions." });
-        let score = 0;
-        for (const q of allQuestions) {
-          if (answers[q.id] === q.correctAnswer) score++;
-        }
-        const attempt = await storage.createAttempt({
-          userId,
-          quizId,
-          score,
-          totalQuestions: allQuestions.length,
-          answers,
-          timeTaken,
+  app.post("/api/quizzes/:id/submit", requireAuth, async (req, res) => {
+    try {
+      const quizId = req.params.id;
+      const userId = req.session.userId!;
+      const existing = await storage.getUserAttemptForQuiz(userId, quizId);
+      if (existing)
+        return res.status(400).json({
+          message: "You have already attempted this quiz.",
+          code: "ALREADY_ATTEMPTED",
+          attempt: existing,
         });
-        res.json({
-          attempt,
-          correctAnswers: Object.fromEntries(
-            allQuestions.map((q) => [q.id, q.correctAnswer]),
+      const { answers, timeTaken } = req.body;
+      const allQuestions = await storage.getQuestionsByQuiz(quizId);
+      if (allQuestions.length === 0)
+        return res
+          .status(400)
+          .json({ message: "This quiz has no questions." });
+      let score = 0;
+      for (const q of allQuestions) {
+        if (answers[q.id] === q.correctAnswer) score++;
+      }
+      const attempt = await storage.createAttempt({
+        userId,
+        quizId,
+        score,
+        totalQuestions: allQuestions.length,
+        answers,
+        timeTaken,
+      });
+      res.json({
+        attempt,
+        correctAnswers: Object.fromEntries(
+          allQuestions.map((q) => [q.id, q.correctAnswer]),
+        ),
+      });
+    } catch (err) {
+      console.error("Submit quiz error:", err);
+      res.status(500).json({ message: "Submit failed" });
+    }
+  });
+
+  app.post("/api/admin/quizzes", requireAdminAuth, async (req, res) => {
+    try {
+      const data = insertQuizSchema.parse(req.body);
+      const quiz = await storage.createQuiz({ ...data, isActive: false });
+      res.json(quiz);
+    } catch (err) {
+      if (err instanceof z.ZodError)
+        return res.status(400).json({ message: err.errors[0].message });
+      res.status(500).json({ message: "Failed to create quiz" });
+    }
+  });
+
+  app.put("/api/admin/quizzes/:id", requireAdminAuth, async (req, res) => {
+    try {
+      const data = insertQuizSchema.partial().parse(req.body);
+      const oldQuiz = await storage.getQuizById(req.params.id);
+      const quiz = await storage.updateQuiz(req.params.id, data);
+      if (!quiz) return res.status(404).json({ message: "Quiz not found" });
+      if (!oldQuiz?.isActive && quiz.isActive) {
+        Promise.all([
+          storage.notifyAllStudents(
+            "📝 New Quiz Available",
+            `"${quiz.title}" is now available. Attempt it now!`,
+            "quiz",
           ),
-        });
-      } catch (err) {
-        console.error("Submit quiz error:", err);
-        res.status(500).json({ message: "Submit failed" });
+          broadcastPush(
+            "📝 New Quiz Available",
+            `"${quiz.title}" is now available!`,
+            { type: "quiz", quizId: quiz.id },
+          ),
+        ]).catch((err) =>
+          console.error("Notification error (quiz publish):", err),
+        );
       }
-    },
-  );
+      res.json(quiz);
+    } catch (err) {
+      if (err instanceof z.ZodError)
+        return res.status(400).json({ message: err.errors[0].message });
+      res.status(500).json({ message: "Failed to update quiz" });
+    }
+  });
 
-  app.post(
-    "/api/admin/quizzes",
-    requireAdminAuth,
-    // requireValidSession,
-    async (req, res) => {
-      try {
-        const data = insertQuizSchema.parse(req.body);
-        const quiz = await storage.createQuiz({ ...data, isActive: false });
-        // if (quiz.isActive) {
-        //   Promise.all([
-        //     storage.notifyAllStudents(
-        //       "📝 New Quiz Available",
-        //       `"${quiz.title}" is now available. Attempt it before the deadline!`,
-        //       "quiz",
-        //     ),
-        //     broadcastPush(
-        //       "📝 New Quiz Available",
-        //       `"${quiz.title}" is now available!`,
-        //       { type: "quiz", quizId: quiz.id },
-        //     ),
-        //   ]).catch((err) =>
-        //     console.error("Notification error (quiz create):", err),
-        //   );
-        // }
-        res.json(quiz);
-      } catch (err) {
-        if (err instanceof z.ZodError)
-          return res.status(400).json({ message: err.errors[0].message });
-        res.status(500).json({ message: "Failed to create quiz" });
-      }
-    },
-  );
-
-  app.put(
-    "/api/admin/quizzes/:id",
-    requireAdminAuth,
-    // requireValidSession,
-    async (req, res) => {
-      try {
-        const data = insertQuizSchema.partial().parse(req.body);
-        const oldQuiz = await storage.getQuizById(req.params.id);
-        const quiz = await storage.updateQuiz(req.params.id, data);
-        if (!quiz) return res.status(404).json({ message: "Quiz not found" });
-        if (!oldQuiz?.isActive && quiz.isActive) {
-          Promise.all([
-            storage.notifyAllStudents(
-              "📝 New Quiz Available",
-              `"${quiz.title}" is now available. Attempt it now!`,
-              "quiz",
-            ),
-            broadcastPush(
-              "📝 New Quiz Available",
-              `"${quiz.title}" is now available!`,
-              { type: "quiz", quizId: quiz.id },
-            ),
-          ]).catch((err) =>
-            console.error("Notification error (quiz publish):", err),
-          );
-        }
-        res.json(quiz);
-      } catch (err) {
-        if (err instanceof z.ZodError)
-          return res.status(400).json({ message: err.errors[0].message });
-        res.status(500).json({ message: "Failed to update quiz" });
-      }
-    },
-  );
-
-  app.delete(
-    "/api/admin/quizzes/:id",
-    requireAdminAuth,
-    // requireValidSession,
-    async (req, res) => {
-      try {
-        await storage.deleteQuiz(req.params.id);
-        res.json({ success: true });
-      } catch {
-        res.status(500).json({ message: "Failed to delete quiz" });
-      }
-    },
-  );
+  app.delete("/api/admin/quizzes/:id", requireAdminAuth, async (req, res) => {
+    try {
+      await storage.deleteQuiz(req.params.id);
+      res.json({ success: true });
+    } catch {
+      res.status(500).json({ message: "Failed to delete quiz" });
+    }
+  });
 
   // ========== QUESTIONS ==========
-  app.get(
-    "/api/admin/questions",
-    requireAdminAuth,
-    // requireValidSession,
-    async (req, res) => {
-      try {
-        const quizId = req.query.quizId as string | undefined;
-        const withQuizInfo = req.query.withQuizInfo === "true";
-        if (withQuizInfo)
-          return res.json(await storage.getAllQuestionsWithQuizInfo(quizId));
-        if (quizId) return res.json(await storage.getQuestionsByQuiz(quizId));
-        res.json(await storage.getAllQuestions());
-      } catch {
-        res.status(500).json({ message: "Failed to fetch questions" });
-      }
-    },
-  );
-  app.post(
-    "/api/admin/questions",
-    requireAdminAuth,
-    // requireValidSession,
-    async (req, res) => {
-      try {
-        // console.log('req.body', req.body)
-        res.json(
-          await storage.createQuestion(insertQuestionSchema.parse(req.body)),
-        );
-      } catch (err) {
-        if (err instanceof z.ZodError)
-          return res.status(400).json({ message: err.errors[0].message });
-        res.status(500).json({ message: "Failed to create question" });
-      }
-    },
-  );
-  app.put(
-    "/api/admin/questions/:id",
-    requireAdminAuth,
-    // requireValidSession,
-    async (req, res) => {
-      try {
-        const q = await storage.updateQuestion(
-          req.params.id,
-          insertQuestionSchema.partial().parse(req.body),
-        );
-        if (!q) return res.status(404).json({ message: "Question not found" });
-        res.json(q);
-      } catch (err) {
-        if (err instanceof z.ZodError)
-          return res.status(400).json({ message: err.errors[0].message });
-        res.status(500).json({ message: "Failed to update question" });
-      }
-    },
-  );
+  app.get("/api/admin/questions", requireAdminAuth, async (req, res) => {
+    try {
+      const quizId = req.query.quizId as string | undefined;
+      const withQuizInfo = req.query.withQuizInfo === "true";
+      if (withQuizInfo)
+        return res.json(await storage.getAllQuestionsWithQuizInfo(quizId));
+      if (quizId) return res.json(await storage.getQuestionsByQuiz(quizId));
+      res.json(await storage.getAllQuestions());
+    } catch {
+      res.status(500).json({ message: "Failed to fetch questions" });
+    }
+  });
+  app.post("/api/admin/questions", requireAdminAuth, async (req, res) => {
+    try {
+      res.json(
+        await storage.createQuestion(insertQuestionSchema.parse(req.body)),
+      );
+    } catch (err) {
+      if (err instanceof z.ZodError)
+        return res.status(400).json({ message: err.errors[0].message });
+      res.status(500).json({ message: "Failed to create question" });
+    }
+  });
+  app.put("/api/admin/questions/:id", requireAdminAuth, async (req, res) => {
+    try {
+      const q = await storage.updateQuestion(
+        req.params.id,
+        insertQuestionSchema.partial().parse(req.body),
+      );
+      if (!q) return res.status(404).json({ message: "Question not found" });
+      res.json(q);
+    } catch (err) {
+      if (err instanceof z.ZodError)
+        return res.status(400).json({ message: err.errors[0].message });
+      res.status(500).json({ message: "Failed to update question" });
+    }
+  });
   app.delete(
     "/api/admin/questions/:id",
     requireAdminAuth,
-    // requireValidSession,
     async (req, res) => {
       try {
         await storage.deleteQuestion(req.params.id);
@@ -1307,10 +1091,9 @@ app.put(
   app.post(
     "/api/admin/quizzes/:quizId/questions",
     requireAdminAuth,
-    // requireValidSession,
     async (req, res) => {
       try {
-        const demo = await storage.addQuestionToQuiz(
+        await storage.addQuestionToQuiz(
           req.params.quizId,
           req.body.questionId,
           req.body.order,
@@ -1324,7 +1107,6 @@ app.put(
   app.delete(
     "/api/admin/quizzes/:quizId/questions/:questionId",
     requireAdminAuth,
-    // requireValidSession,
     async (req, res) => {
       try {
         await storage.removeQuestionFromQuiz(
@@ -1342,7 +1124,6 @@ app.put(
   app.put(
     "/api/admin/quizzes/:quizId/questions/reorder",
     requireAdminAuth,
-    // requireValidSession,
     async (req, res) => {
       try {
         await storage.reorderQuestionsInQuiz(
@@ -1360,7 +1141,6 @@ app.put(
   app.get(
     "/api/admin/quizzes/:id/analytics",
     requireAdminAuth,
-    // requireValidSession,
     async (req, res) => {
       try {
         const analytics = await storage.getQuizAnalytics(req.params.id);
@@ -1375,73 +1155,57 @@ app.put(
   );
 
   // ========== NOTICE BOARD ==========
-  app.get(
-    "/api/admin/notices",
-    requireAdminAuth,
-    // requireValidSession,
-    async (_req, res) => {
-      try {
-        res.json(await storage.getNotices());
-      } catch {
-        res.status(500).json({ message: "Failed to fetch notices" });
-      }
-    },
-  );
+  app.get("/api/admin/notices", requireAdminAuth, async (_req, res) => {
+    try {
+      res.json(await storage.getNotices());
+    } catch {
+      res.status(500).json({ message: "Failed to fetch notices" });
+    }
+  });
 
-  app.post(
-    "/api/admin/notices",
-    requireAdminAuth,
-    // requireValidSession,
-    async (req, res) => {
-      try {
-        const raw = insertNoticeSchema.parse(req.body);
-        const data = { ...raw, expiresAt: new Date(raw.expiresAt) };
-        const notice = await storage.createNotice(data);
-        Promise.all([
-          storage.notifyAllStudents(
-            `📢 Notice: ${notice.title}`,
-            notice.message,
-            "notice",
-          ),
-          broadcastPush(`📢 Notice: ${notice.title}`, notice.message, {
-            type: "notice",
-            noticeId: notice.id,
-          }),
-        ]).catch((err) => console.error("Notification error (notice):", err));
-        res.json(notice);
-      } catch (err) {
-        if (err instanceof z.ZodError)
-          return res.status(400).json({ message: err.errors[0].message });
-        res.status(500).json({ message: "Failed to create notice" });
-      }
-    },
-  );
+  app.post("/api/admin/notices", requireAdminAuth, async (req, res) => {
+    try {
+      const raw = insertNoticeSchema.parse(req.body);
+      const data = { ...raw, expiresAt: new Date(raw.expiresAt) };
+      const notice = await storage.createNotice(data);
+      Promise.all([
+        storage.notifyAllStudents(
+          `📢 Notice: ${notice.title}`,
+          notice.message,
+          "notice",
+        ),
+        broadcastPush(`📢 Notice: ${notice.title}`, notice.message, {
+          type: "notice",
+          noticeId: notice.id,
+        }),
+      ]).catch((err) => console.error("Notification error (notice):", err));
+      res.json(notice);
+    } catch (err) {
+      if (err instanceof z.ZodError)
+        return res.status(400).json({ message: err.errors[0].message });
+      res.status(500).json({ message: "Failed to create notice" });
+    }
+  });
 
-  app.put(
-    "/api/admin/notices/:id",
-    requireAdminAuth,
-    // requireValidSession,
-    async (req, res) => {
-      try {
-        const raw = insertNoticeSchema.partial().parse(req.body);
-        const data: any = { ...raw };
-        if (raw.expiresAt) data.expiresAt = new Date(raw.expiresAt);
-        const notice = await storage.updateNotice(req.params.id, data);
-        if (!notice)
-          return res.status(404).json({ message: "Notice not found" });
-        res.json(notice);
-      } catch (err) {
-        if (err instanceof z.ZodError)
-          return res.status(400).json({ message: err.errors[0].message });
-        res.status(500).json({ message: "Failed to update notice" });
-      }
-    },
-  );
+  app.put("/api/admin/notices/:id", requireAdminAuth, async (req, res) => {
+    try {
+      const raw = insertNoticeSchema.partial().parse(req.body);
+      const data: any = { ...raw };
+      if (raw.expiresAt) data.expiresAt = new Date(raw.expiresAt);
+      const notice = await storage.updateNotice(req.params.id, data);
+      if (!notice)
+        return res.status(404).json({ message: "Notice not found" });
+      res.json(notice);
+    } catch (err) {
+      if (err instanceof z.ZodError)
+        return res.status(400).json({ message: err.errors[0].message });
+      res.status(500).json({ message: "Failed to update notice" });
+    }
+  });
 
   app.delete(
     "/api/admin/notices/:id",
     requireAdminAuth,
-    // requireValidSession,
     async (req, res) => {
       try {
         await storage.deleteNotice(req.params.id);
@@ -1452,45 +1216,60 @@ app.put(
     },
   );
 
-  app.get(
-    "/api/notices",
-    requireAuth,
-    // requireValidSession,
-    async (_req, res) => {
-      try {
-        res.json(await storage.getActiveNotices());
-      } catch {
-        res.status(500).json({ message: "Failed to fetch notices" });
-      }
-    },
-  );
+  app.get("/api/notices", requireAuth, async (_req, res) => {
+    try {
+      res.json(await storage.getActiveNotices());
+    } catch {
+      res.status(500).json({ message: "Failed to fetch notices" });
+    }
+  });
 
-  // ========== ATTEMPTS & NOTIFICATIONS ==========
-  app.get(
-    "/api/attempts",
-    requireAuth,
-    // requireValidSession,
-    async (req, res) => {
-      try {
-        res.json(await storage.getAttemptsByUser(req.session.userId!));
-      } catch {
-        res.status(500).json({ message: "Failed to fetch attempts" });
-      }
-    },
-  );
-  app.get(
-    "/api/notifications",
-    requireAuth,
-    // requireValidSession,
-    async (req, res) => {
-      try {
-        res.json(await storage.getNotifications(req.session.userId!));
-      } catch {
-        res.status(500).json({ message: "Failed to fetch notifications" });
-      }
-    },
-  );
-  // ✅ read-all MUST come BEFORE /:id/read
+  // ========== ATTEMPTS ==========
+  // ── KEY CHANGE: enriched with questions + correctAnswers so the
+  //    app Review button has all the data it needs without a second request ──
+  app.get("/api/attempts", requireAuth, async (req, res) => {
+    try {
+      const attempts = await storage.getAttemptsByUser(req.session.userId!);
+
+      const enriched = await Promise.all(
+        attempts.map(async (attempt: any) => {
+          try {
+            const allQuestions = await storage.getQuestionsByQuiz(
+              attempt.quizId,
+            );
+            return {
+              ...attempt,
+              // Strip correctAnswer from question objects (keep options/text/id)
+              questions: allQuestions.map(({ correctAnswer, ...q }) => q),
+              // Separate map of questionId → correctOptionIndex
+              correctAnswers: Object.fromEntries(
+                allQuestions.map((q) => [q.id, q.correctAnswer]),
+              ),
+              answers: attempt.answers ?? {},
+            };
+          } catch {
+            // Fallback — return attempt as-is if question fetch fails
+            return attempt;
+          }
+        }),
+      );
+
+      res.json(enriched);
+    } catch {
+      res.status(500).json({ message: "Failed to fetch attempts" });
+    }
+  });
+
+  // ========== NOTIFICATIONS ==========
+  app.get("/api/notifications", requireAuth, async (req, res) => {
+    try {
+      res.json(await storage.getNotifications(req.session.userId!));
+    } catch {
+      res.status(500).json({ message: "Failed to fetch notifications" });
+    }
+  });
+
+  // read-all MUST come BEFORE /:id/read
   app.put("/api/notifications/read-all", requireAuth, async (req, res) => {
     try {
       await storage.markAllNotificationsRead(req.session.userId!);
@@ -1509,46 +1288,39 @@ app.put(
     }
   });
 
-  app.delete("/api/notifications/clear-all", requireAuth, async (req, res) => {
-    try {
-      await storage.clearAllNotifications(req.session.userId!);
-      res.json({ success: true });
-    } catch {
-      res.status(500).json({ message: "Failed to clear notifications" });
-    }
-  });
+  app.delete(
+    "/api/notifications/clear-all",
+    requireAuth,
+    async (req, res) => {
+      try {
+        await storage.clearAllNotifications(req.session.userId!);
+        res.json({ success: true });
+      } catch {
+        res.status(500).json({ message: "Failed to clear notifications" });
+      }
+    },
+  );
 
   // ========== ADMIN STATS & USERS ==========
-  app.get(
-    "/api/admin/stats",
-    requireAdminAuth,
-    // requireValidSession,
-    async (_req, res) => {
-      try {
-        res.json(await storage.getAdminStats());
-      } catch {
-        res.status(500).json({ message: "Failed to fetch stats" });
-      }
-    },
-  );
-  app.get(
-    "/api/admin/users",
-    requireAdminAuth,
-    // requireValidSession,
-    async (_req, res) => {
-      try {
-        res.json(await storage.getAllUsers());
-      } catch {
-        res.status(500).json({ message: "Failed to fetch users" });
-      }
-    },
-  );
+  app.get("/api/admin/stats", requireAdminAuth, async (_req, res) => {
+    try {
+      res.json(await storage.getAdminStats());
+    } catch {
+      res.status(500).json({ message: "Failed to fetch stats" });
+    }
+  });
+  app.get("/api/admin/users", requireAdminAuth, async (_req, res) => {
+    try {
+      res.json(await storage.getAllUsers());
+    } catch {
+      res.status(500).json({ message: "Failed to fetch users" });
+    }
+  });
 
   // ========== QUIZ MAINTENANCE ==========
   app.post(
     "/api/admin/quizzes/:quizId/sync-questions",
     requireAdminAuth,
-    // requireValidSession,
     async (req, res) => {
       try {
         const db = getFirestore();
@@ -1608,7 +1380,6 @@ app.put(
   app.get(
     "/api/admin/quizzes/:quizId/sync-status",
     requireAdminAuth,
-    // requireValidSession,
     async (req, res) => {
       try {
         const db = getFirestore();
