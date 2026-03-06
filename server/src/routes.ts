@@ -374,12 +374,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/auth/me", async (req, res) => {
     let userId: string | undefined;
     let tokenSession: string | undefined;
-    let resolvedUser: any = null; // ← add this
 
     const authHeader = req.headers.authorization;
     if (authHeader?.startsWith("Bearer ")) {
       try {
-        const decoded = jwt.verify(authHeader.slice(7), JWT_SECRET) as any;
+        const decoded = jwt.verify(authHeader.slice(7), JWT_SECRET) as {
+          userId?: string;
+          studentId?: string;
+          sessionToken?: string;
+        };
         userId = decoded.userId || decoded.studentId;
         tokenSession = decoded.sessionToken;
       } catch {
@@ -391,7 +394,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     if (!userId) return res.status(401).json({ message: "Not authenticated" });
 
+    // ✅ FIX: Validate sessionToken if present in JWT
     if (tokenSession) {
+      // Check cache first
       const cachedToken = sessionCache.get(userId);
       if (cachedToken) {
         if (cachedToken !== tokenSession) {
@@ -400,24 +405,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
             code: "SESSION_INVALIDATED",
           });
         }
-        // ✅ Cache hit — NO Firestore reads needed at all
       } else {
-        // Cache miss — fetch once, reuse below
-        resolvedUser =
+        // Cache miss — check DB
+        const dbUser =
           (await storage.getUser(userId)) ||
           (await storage.getStudentById(userId));
-
-        if (!resolvedUser)
+        if (!dbUser) {
           return res.status(401).json({ message: "User not found" });
-
-        const dbToken = (resolvedUser as any).sessionToken;
+        }
+        const dbToken = (dbUser as any).sessionToken;
         if (dbToken !== undefined && dbToken !== tokenSession) {
           return res.status(401).json({
             message: "Session expired. Logged in from another device.",
             code: "SESSION_INVALIDATED",
           });
         }
-        if ((resolvedUser as any).status === "blocked") {
+        // ✅ Check blocked status here too
+        if ((dbUser as any).status === "blocked") {
           return res.status(403).json({
             message: "Your account has been blocked. Contact your teacher.",
             code: "ACCOUNT_BLOCKED",
@@ -427,22 +431,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     }
 
-    // ✅ Reuse resolvedUser — no extra read
-    const user = resolvedUser || (await storage.getUser(userId));
-    if (user && (user as any).password !== undefined) {
-      const { password: _, ...safeUser } = user as any;
+    const user = await storage.getUser(userId);
+    if (user) {
+      const { password: _, ...safeUser } = user;
       return res.json({ user: safeUser });
     }
-
-    const student = resolvedUser || (await storage.getStudentById(userId));
+    const student = await storage.getStudentById(userId);
     if (student) {
+      // ✅ Also check blocked on student fetch
       if ((student as any).status === "blocked") {
         return res.status(403).json({
           message: "Your account has been blocked. Contact your teacher.",
           code: "ACCOUNT_BLOCKED",
         });
       }
-      const { password: _, ...safeStudent } = student as any;
+      const { password: _, ...safeStudent } = student;
       return res.json({
         user: {
           ...safeStudent,
@@ -451,9 +454,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         },
       });
     }
-
     return res.status(401).json({ message: "User not found" });
   });
+
   app.put("/api/auth/profile", requireAdminAuth, async (req, res) => {
     try {
       const user = await storage.updateUser(req.session.userId!, {
@@ -712,6 +715,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log("🔑 Clearing session for student:", req.params.id);
         await storage.updateStudentSessionToken(req.params.id, null as any);
         sessionCache.delete(req.params.id);
+        
 
         res.json({ success: true });
       } catch (err) {
@@ -1436,9 +1440,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/notifications", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId!;
-
+      console.log("🔔 userId:", userId); // ← ADD KARO
       const result = await storage.getNotifications(userId);
- 
+      console.log("🔔 result count:", result.length); // ← ADD KARO
       res.json(result);
     } catch (err) {
       console.error("❌ error:", err);
