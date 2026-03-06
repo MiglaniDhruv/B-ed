@@ -9,19 +9,6 @@ import React, {
 } from "react";
 import { api, studentApi, User, Student } from "./api";
 
-// ─── Inactivity timeout: 5 minutes ───────────────────────────────────────────
-const INACTIVITY_TIMEOUT_MS = 5 * 60 * 1000;
-
-// ─── Activity events to track ─────────────────────────────────────────────────
-const ACTIVITY_EVENTS: (keyof WindowEventMap)[] = [
-  "mousemove",
-  "mousedown",
-  "keydown",
-  "touchstart",
-  "scroll",
-  "click",
-];
-
 interface AuthContextType {
   user: User | null;
   student: Student | null;
@@ -43,19 +30,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [authReady, setAuthReady] = useState(false);
   const [authVersion, setAuthVersion] = useState(0);
 
-  // ─── Refs ──────────────────────────────────────────────────────────────────
-  const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sessionPollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-  const isLoggedIn = useRef(false); // track login state without stale closures
-
-  // ─── helpers ───────────────────────────────────────────────────────────────
-  const isNetworkError = (message: string) =>
-    message === "Failed to fetch" ||
-    message.includes("NetworkError") ||
-    message.includes("ERR_NETWORK") ||
-    message.includes("ERR_INTERNET_DISCONNECTED") ||
-    message.includes("timeout") ||
-    message.includes("aborted");
+  const isLoggedIn = useRef(false);
 
   // ─── Core clear-all-state ─────────────────────────────────────────────────
   const clearSession = useCallback(() => {
@@ -68,42 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isLoggedIn.current = false;
   }, []);
 
-  // ─── Inactivity logout ────────────────────────────────────────────────────
-  const resetInactivityTimer = useCallback(() => {
-    if (!isLoggedIn.current) return;
-    if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
-    inactivityTimer.current = setTimeout(async () => {
-      if (!isLoggedIn.current) return;
-      console.log("Logging out due to inactivity");
-      try {
-        if (api.getToken()) await api.logout();
-        else if (studentApi.getToken()) await studentApi.logout();
-      } catch {}
-      clearSession();
-      alert("You have been logged out due to 5 minutes of inactivity.");
-    }, INACTIVITY_TIMEOUT_MS);
-  }, [clearSession]);
-
-  const startActivityTracking = useCallback(() => {
-    resetInactivityTimer();
-    ACTIVITY_EVENTS.forEach((event) =>
-      window.addEventListener(event, resetInactivityTimer, { passive: true }),
-    );
-  }, [resetInactivityTimer]);
-
-  const stopActivityTracking = useCallback(() => {
-    if (inactivityTimer.current) {
-      clearTimeout(inactivityTimer.current);
-      inactivityTimer.current = null;
-    }
-    ACTIVITY_EVENTS.forEach((event) =>
-      window.removeEventListener(event, resetInactivityTimer),
-    );
-  }, [resetInactivityTimer]);
-
-  // ─── Session polling (detect logout from another device) ──────────────────
-  // Polls /api/auth/me every 30 seconds — if SESSION_INVALIDATED is returned,
-  // the user logged in from another device and this session is kicked.
+  // ─── Session polling — dusre device se login hone pe auto logout ──────────
   const startSessionPolling = useCallback(() => {
     if (sessionPollTimer.current) clearInterval(sessionPollTimer.current);
     sessionPollTimer.current = setInterval(async () => {
@@ -112,26 +53,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (api.getToken()) {
           await api.getMe();
         } else if (studentApi.getToken()) {
-          // Students don't have a /me endpoint — use a lightweight check
-          // by calling getMe and catching the invalidation error
           await studentApi.getSemesters();
         }
       } catch (err: any) {
         const message = err?.message ?? "";
-        if (
+        const isInvalidated =
           message.includes("SESSION_INVALIDATED") ||
           message.includes("Session expired") ||
           message.includes("Logged in from another device") ||
-          err?.code === "SESSION_INVALIDATED"
-        ) {
+          err?.code === "SESSION_INVALIDATED";
+
+        if (isInvalidated) {
           clearSession();
           alert(
             "You have been logged out because your account was logged in from another device.",
           );
         }
-        // Ignore network errors — don't log out on flaky connections
+        // Network errors ignore karo — flaky connection pe logout nahi
       }
-    }, 30_000); // poll every 30 seconds
+    }, 30_000);
   }, [clearSession]);
 
   const stopSessionPolling = useCallback(() => {
@@ -141,44 +81,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // ─── Start / stop everything when login state changes ─────────────────────
   const onLoginSuccess = useCallback(() => {
     isLoggedIn.current = true;
-    startActivityTracking();
     startSessionPolling();
-  }, [startActivityTracking, startSessionPolling]);
+  }, [startSessionPolling]);
 
   const onLogout = useCallback(() => {
     isLoggedIn.current = false;
-    stopActivityTracking();
     stopSessionPolling();
-  }, [stopActivityTracking, stopSessionPolling]);
+  }, [stopSessionPolling]);
 
   // ─── Cleanup on unmount ───────────────────────────────────────────────────
   useEffect(() => {
     return () => {
-      stopActivityTracking();
       stopSessionPolling();
     };
-  }, [stopActivityTracking, stopSessionPolling]);
+  }, [stopSessionPolling]);
 
-  // ─── Intercept API 401 SESSION_INVALIDATED responses globally ─────────────
-  // Patch fetch so any 401 with SESSION_INVALIDATED from ANY api call forces logout
+  // ─── Global fetch intercept — 401/403 pe auto logout ─────────────────────
   useEffect(() => {
     const originalFetch = window.fetch;
     window.fetch = async (...args) => {
       const response = await originalFetch(...args);
-      // apni API utility file mein (jahan fetch/axios call hoti hai)
       if (response.status === 401 || response.status === 403) {
-        const data = await response.json();
-        if (
-          data.code === "SESSION_INVALIDATED" ||
-          data.code === "ACCOUNT_BLOCKED"
-        ) {
-          // Token clear karo
-          localStorage.removeItem("token"); // ya jahan bhi token store hai
-          // Login page pe redirect karo
-          window.location.href = "/login";
+        // Clone karo taaki body dobara read ho sake
+        const cloned = response.clone();
+        try {
+          const data = await cloned.json();
+          if (
+            data.code === "SESSION_INVALIDATED" ||
+            data.code === "ACCOUNT_BLOCKED"
+          ) {
+            localStorage.removeItem("token");
+            localStorage.removeItem("student_data");
+            window.location.href = "/login";
+          }
+        } catch {
+          // JSON parse fail — ignore
         }
       }
       return response;
@@ -186,7 +125,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       window.fetch = originalFetch;
     };
-  }, [clearSession, onLogout]);
+  }, []);
 
   // ─── Initial auth check ───────────────────────────────────────────────────
   const checkAuth = async () => {
@@ -214,7 +153,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     } catch (error: any) {
       const message = error?.message ?? "";
-      if (isNetworkError(message)) {
+      const isNetwork =
+        message === "Failed to fetch" ||
+        message.includes("NetworkError") ||
+        message.includes("ERR_NETWORK") ||
+        message.includes("ERR_INTERNET_DISCONNECTED") ||
+        message.includes("timeout") ||
+        message.includes("aborted");
+
+      if (isNetwork) {
         console.warn("Auth check skipped — network unavailable:", message);
       } else {
         console.error("Auth check failed:", message);
@@ -276,7 +223,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(user);
     } catch (error: any) {
       const message = error?.message ?? "";
-      if (isNetworkError(message)) {
+      const isNetwork =
+        message === "Failed to fetch" ||
+        message.includes("NetworkError") ||
+        message.includes("ERR_NETWORK") ||
+        message.includes("ERR_INTERNET_DISCONNECTED") ||
+        message.includes("timeout") ||
+        message.includes("aborted");
+
+      if (isNetwork) {
         console.warn("User refresh skipped — network unavailable:", message);
       } else {
         console.error("Failed to refresh user:", message);
