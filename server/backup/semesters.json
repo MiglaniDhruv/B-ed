@@ -1,0 +1,37 @@
+[
+  {
+    "_id": "3HrzTuZsYtYcw5M6UMqD",
+    "number": 2,
+    "title": "Semester 2",
+    "description": "Second semester subjects and courses",
+    "order": 2
+  },
+  {
+    "_id": "Exam Preparation",
+    "description": "For Exam Preparation",
+    "number": 5,
+    "order": 5,
+    "title": "Exam Preparation"
+  },
+  {
+    "_id": "Le0kXuszQ3yHgnmb8edm",
+    "number": 3,
+    "title": "Semester 3",
+    "description": "Third semester subjects and courses",
+    "order": 3
+  },
+  {
+    "_id": "cgUmozmmxUk1kVU9EO3E",
+    "number": 4,
+    "title": "Semester 4",
+    "description": "Fourth semester subjects and courses",
+    "order": 4
+  },
+  {
+    "_id": "xuARMWKX5I1OqWUyKbge",
+    "number": 1,
+    "title": "Semester 1",
+    "description": "First semester subjects and courses",
+    "order": 1
+  }
+]

@@ -32,44 +32,8 @@ const JWT_SECRET =
 // ─── L1 session cache: userId → sessionToken ──────────────────────────────────
 // Warms up on first DB hit, invalidated on login/logout/block/password-reset.
 // Server restarts clear it — requireAuth falls back to DB safely.
-// const sessionCache = new Map<string, string>();
-const SESSION_CACHE_TTL_MS = 5 * 60 * 1000;
+const sessionCache = new Map<string, string>();
 
-interface SessionCacheEntry {
-  token: string;
-  expiresAt: number;
-}
-
-const sessionCache = new Map<string, SessionCacheEntry>();
-
-function getSessionCache(userId: string): string | null {
-  const entry = sessionCache.get(userId);
-  if (!entry) return null;
-  if (Date.now() > entry.expiresAt) {
-    sessionCache.delete(userId);
-    return null;
-  }
-  return entry.token;
-}
-
-function setSessionCache(userId: string, token: string): void {
-  sessionCache.set(userId, {
-    token,
-    expiresAt: Date.now() + SESSION_CACHE_TTL_MS,
-  });
-}
-
-function invalidateSessionCache(userId: string): void {
-  sessionCache.delete(userId);
-}
-
-// Memory leak se bachao
-setInterval(() => {
-  const now = Date.now();
-  for (const [userId, entry] of sessionCache.entries()) {
-    if (now > entry.expiresAt) sessionCache.delete(userId);
-  }
-}, 10 * 60 * 1000);
 // ─── Route-level cache for /api/semesters ────────────────────────────────────
 // This endpoint calls getSemesterStats() for each semester which is expensive
 // (multiple Firestore queries). Cache at the route level so all students
@@ -138,7 +102,7 @@ async function requireAuth(req: Request, res: Response, next: NextFunction) {
     }
 
     // Fast path: session is in L1 cache
-   const cachedToken = getSessionCache(userId);
+    const cachedToken = sessionCache.get(userId);
     if (cachedToken) {
       if (cachedToken !== tokenSession) {
         return res.status(401).json({
@@ -451,7 +415,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!userId) return res.status(401).json({ message: "Not authenticated" });
 
     if (tokenSession) {
-const cachedToken = getSessionCache(userId);
+      const cachedToken = sessionCache.get(userId);
       if (cachedToken) {
         if (cachedToken !== tokenSession) {
           return res.status(401).json({
@@ -562,114 +526,54 @@ const cachedToken = getSessionCache(userId);
   // Falls back to DB only if cache is cold (server restart).
   // Client: replace `api.getMe()` / `studentApi.getSemesters()` in the poll
   // with `GET /api/auth/ping`.
-  // app.get("/api/auth/ping", async (req, res) => {
-  //   const authHeader = req.headers.authorization;
-  //   if (!authHeader?.startsWith("Bearer ")) {
-  //     return res.status(401).json({ ok: false, code: "NO_TOKEN" });
-  //   }
-  //   try {
-  //     const decoded = jwt.verify(authHeader.slice(7), JWT_SECRET) as {
-  //       userId?: string;
-  //       studentId?: string;
-  //       sessionToken?: string;
-  //     };
-  //     const userId = decoded.userId || decoded.studentId;
-  //     const tokenSession = decoded.sessionToken;
-  //     if (!userId || !tokenSession) {
-  //       return res.status(401).json({ ok: false, code: "INVALID_TOKEN" });
-  //     }
-
-  //     // Check L1 cache first (0 Firestore reads)
-  //     const cachedToken = sessionCache.get(userId);
-  //     if (cachedToken) {
-  //       if (cachedToken !== tokenSession) {
-  //         return res
-  //           .status(401)
-  //           .json({ ok: false, code: "SESSION_INVALIDATED" });
-  //       }
-  //       return res.json({ ok: true });
-  //     }
-
-  //     // Cache miss — one DB read to warm up cache
-  //     const user =
-  //       (await storage.getUser(userId)) ||
-  //       (await storage.getStudentById(userId));
-  //     if (!user) return res.status(401).json({ ok: false, code: "NOT_FOUND" });
-
-  //     const dbToken = (user as any).sessionToken;
-  //     if (dbToken !== undefined && dbToken !== tokenSession) {
-  //       return res.status(401).json({ ok: false, code: "SESSION_INVALIDATED" });
-  //     }
-  //     if ((user as any).status === "blocked") {
-  //       return res.status(403).json({ ok: false, code: "ACCOUNT_BLOCKED" });
-  //     }
-  //     if (dbToken) sessionCache.set(userId, dbToken);
-  //     return res.json({ ok: true });
-  //   } catch {
-  //     return res.status(401).json({ ok: false, code: "INVALID_TOKEN" });
-  //   }
-  // });
-
   app.get("/api/auth/ping", async (req, res) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith("Bearer ")) {
-    return res.status(401).json({ ok: false, code: "NO_TOKEN" });
-  }
-
-  try {
-    const decoded = jwt.verify(authHeader.slice(7), JWT_SECRET) as {
-      userId?: string;
-      studentId?: string;
-      sessionToken?: string;
-    };
-
-    const userId = decoded.userId || decoded.studentId;
-    const tokenSession = decoded.sessionToken;
-
-    if (!userId || !tokenSession) {
-      return res.status(401).json({ ok: false, code: "INVALID_TOKEN" });
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith("Bearer ")) {
+      return res.status(401).json({ ok: false, code: "NO_TOKEN" });
     }
+    try {
+      const decoded = jwt.verify(authHeader.slice(7), JWT_SECRET) as {
+        userId?: string;
+        studentId?: string;
+        sessionToken?: string;
+      };
+      const userId = decoded.userId || decoded.studentId;
+      const tokenSession = decoded.sessionToken;
+      if (!userId || !tokenSession) {
+        return res.status(401).json({ ok: false, code: "INVALID_TOKEN" });
+      }
 
-    // ✅ L1 Cache hit — 0 Firestore reads
-    const cachedToken = getSessionCache(userId);
-    if (cachedToken !== null) {
-      if (cachedToken !== tokenSession) {
+      // Check L1 cache first (0 Firestore reads)
+      const cachedToken = sessionCache.get(userId);
+      if (cachedToken) {
+        if (cachedToken !== tokenSession) {
+          return res
+            .status(401)
+            .json({ ok: false, code: "SESSION_INVALIDATED" });
+        }
+        return res.json({ ok: true });
+      }
+
+      // Cache miss — one DB read to warm up cache
+      const user =
+        (await storage.getUser(userId)) ||
+        (await storage.getStudentById(userId));
+      if (!user) return res.status(401).json({ ok: false, code: "NOT_FOUND" });
+
+      const dbToken = (user as any).sessionToken;
+      if (dbToken !== undefined && dbToken !== tokenSession) {
         return res.status(401).json({ ok: false, code: "SESSION_INVALIDATED" });
       }
-      return res.json({ ok: true }); // ← most requests end here
+      if ((user as any).status === "blocked") {
+        return res.status(403).json({ ok: false, code: "ACCOUNT_BLOCKED" });
+      }
+      if (dbToken) sessionCache.set(userId, dbToken);
+      return res.json({ ok: true });
+    } catch {
+      return res.status(401).json({ ok: false, code: "INVALID_TOKEN" });
     }
+  });
 
-    // 🔄 Cache miss — 1 Firestore read, then cache for 5 min
-    const user =
-      (await storage.getUser(userId)) ||
-      (await storage.getStudentById(userId));
-
-    if (!user) {
-      return res.status(401).json({ ok: false, code: "NOT_FOUND" });
-    }
-
-    const dbToken = (user as any).sessionToken;
-    const status = (user as any).status;
-
-    if (status === "blocked") {
-      invalidateSessionCache(userId); // ensure no stale cache
-      return res.status(403).json({ ok: false, code: "ACCOUNT_BLOCKED" });
-    }
-
-    if (dbToken !== undefined && dbToken !== tokenSession) {
-      invalidateSessionCache(userId);
-      return res.status(401).json({ ok: false, code: "SESSION_INVALIDATED" });
-    }
-
-    // Cache the valid session token
-    if (dbToken) setSessionCache(userId, dbToken);
-
-    return res.json({ ok: true });
-
-  } catch {
-    return res.status(401).json({ ok: false, code: "INVALID_TOKEN" });
-  }
-});
   app.put("/api/auth/profile", requireAdminAuth, async (req, res) => {
     try {
       const user = await storage.updateUser(req.session.userId!, {

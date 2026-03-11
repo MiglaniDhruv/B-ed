@@ -1,0 +1,38 @@
+[
+  {
+    "_id": "cq7w3riJYldzsSEPyzou",
+    "semesterId": "xuARMWKX5I1OqWUyKbge",
+    "name": "Assessment for Learning",
+    "description": "Methods and strategies of assessment",
+    "icon": "AL",
+    "color": "#8B5CF6",
+    "order": 2
+  },
+  {
+    "_id": "gT6EUsLhDqCN6Elo4dkF",
+    "semesterId": "xuARMWKX5I1OqWUyKbge",
+    "name": "Childhood & Growing Up",
+    "description": "Understanding child development and growth",
+    "icon": "CG",
+    "color": "#3B82F6",
+    "order": 1
+  },
+  {
+    "_id": "nzzqYf4fUHmozpbbSoTm",
+    "semesterId": "3HrzTuZsYtYcw5M6UMqD",
+    "name": "Language Across Curriculum",
+    "description": "Language development strategies",
+    "icon": "LC",
+    "color": "#F59E0B",
+    "order": 4
+  },
+  {
+    "_id": "zViQmsmsPEkCJscGWoG0",
+    "semesterId": "3HrzTuZsYtYcw5M6UMqD",
+    "name": "ICT in Education",
+    "description": "Technology integration in teaching",
+    "icon": "IT",
+    "color": "#10B981",
+    "order": 3
+  }
+]

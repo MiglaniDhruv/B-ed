@@ -1,0 +1,15 @@
+[
+  {
+    "_id": "onXYQEbYYTZLBxKTYnbP",
+    "username": "admin",
+    "email": "dhruv.06.2001@gmail.com",
+    "displayName": "Admin",
+    "darkMode": false,
+    "createdAt": {
+      "_seconds": 1771871400,
+      "_nanoseconds": 889000000
+    },
+    "password": "$2a$12$EjNPmRuc0eoENbyq.lsVbevEXrcZJdftUs5gIPDg9dxKqtvRKVMwW",
+    "sessionToken": "f665e8a27226b71967e3770df98f6dba0bfe452351d3aa1f787a65ffa86cdbb0"
+  }
+]

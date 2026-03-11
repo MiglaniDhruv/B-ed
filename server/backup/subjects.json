@@ -1,0 +1,26 @@
+[
+  {
+    "_id": "LVqGYNp1rLQJHKGFD0oL",
+    "semesterNumber": 5,
+    "name": "મનોવિજ્ઞાન",
+    "order": 2
+  },
+  {
+    "_id": "Q7ZK7Btfnc2sRanKcbjt",
+    "semesterNumber": 1,
+    "name": "English",
+    "order": 1
+  },
+  {
+    "_id": "Z7YKrm0XnoOIowBBsxxT",
+    "semesterNumber": 2,
+    "name": "Physics",
+    "order": 1
+  },
+  {
+    "_id": "d6976bNtPjhmmAB9ir6V",
+    "semesterNumber": 2,
+    "name": "Chemistry",
+    "order": 2
+  }
+]

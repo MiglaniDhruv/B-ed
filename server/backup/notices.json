@@ -1,0 +1,128 @@
+[
+  {
+    "_id": "2vWIo3jU1ZF7P067uyuy",
+    "title": "સૂચના",
+    "message": "કોઈને લોગ ઇન થવામાં કે બીજી કોઈ તકલીફ પડતી હોય એપ બાબતે તો વોટસ એપ મેસેજ કરશો",
+    "priority": "normal",
+    "createdAt": {
+      "_seconds": 1772552693,
+      "_nanoseconds": 814000000
+    },
+    "expiresAt": {
+      "_seconds": 1772639040,
+      "_nanoseconds": 0
+    }
+  },
+  {
+    "_id": "6CRlIOr9Gke8gXEne1Qq",
+    "title": "શુભેચ્છા",
+    "message": "રંગોત્સવ પર્વની શુભકામનાઓ આવનાર ધૂળેટી પહેલા આપના જીવનમાં સરકારી નોકરીનો રંગ લાગે એવી શુભેરછાઓ\n *કાછલ પરિવાર*",
+    "priority": "normal",
+    "createdAt": {
+      "_seconds": 1772593634,
+      "_nanoseconds": 621000000
+    },
+    "expiresAt": {
+      "_seconds": 1772766360,
+      "_nanoseconds": 0
+    }
+  },
+  {
+    "_id": "DPHcQIfMrC0B08gstP8M",
+    "title": "જવાબ",
+    "message": "ક્વિઝ વિભાગમાં જઈને આજની ક્વિઝના સાચા જવાબ જોઈ શકશો.",
+    "priority": "normal",
+    "createdAt": {
+      "_seconds": 1772981650,
+      "_nanoseconds": 244000000
+    },
+    "expiresAt": {
+      "_seconds": 1773088020,
+      "_nanoseconds": 0
+    }
+  },
+  {
+    "_id": "JgZW1OBbxqUovoOaxF71",
+    "title": "જવાબ",
+    "message": "આજની ક્વિઝના જવાબ જોઈ શકશો",
+    "priority": "normal",
+    "createdAt": {
+      "_seconds": 1773154630,
+      "_nanoseconds": 872000000
+    },
+    "expiresAt": {
+      "_seconds": 1773261000,
+      "_nanoseconds": 0
+    }
+  },
+  {
+    "_id": "N30qOxKQLvmMmlyr2hxb",
+    "title": "એપ અપડેટ",
+    "message": "નવી મોકલાવેલી ફાઇલથી દરેકે એપ્લિકેશન અપડેટ કરવી ત્યાર બાદ એક ટેસ્ટિંગ માટે પાંચ પ્રશ્નોની ક્વિઝ નવ વાગ્યા આસપાસ મૂકીશ....એ આપવી એમાં જો ડાયરેક્ટ ક્વિઝ સબમિટ થઈ જાય તો મને મેસેજ કરશો...અપડેટ કરવી ફરજિયાત છે",
+    "priority": "normal",
+    "createdAt": {
+      "_seconds": 1772676564,
+      "_nanoseconds": 266000000
+    },
+    "expiresAt": {
+      "_seconds": 1772849340,
+      "_nanoseconds": 0
+    }
+  },
+  {
+    "_id": "OiyBw8x73mz2GEOqkPir",
+    "title": "જવાબ સુધારો",
+    "message": "એક પ્રશ્નમાં નકારાત્મક સંક્રમણ સાચો જવાબ છે. જેમણે ક્વિઝ આપી દીધી છે એમણે સુધારો એ રીતે ગણવો",
+    "priority": "normal",
+    "createdAt": {
+      "_seconds": 1773040798,
+      "_nanoseconds": 78000000
+    },
+    "expiresAt": {
+      "_seconds": 1773147120,
+      "_nanoseconds": 0
+    }
+  },
+  {
+    "_id": "WRqeXeyjKAreyEAMcuQz",
+    "title": "All the best",
+    "message": "All the best to all students for their exam",
+    "priority": "normal",
+    "createdAt": {
+      "_seconds": 1772490806,
+      "_nanoseconds": 614000000
+    },
+    "expiresAt": {
+      "_seconds": 1772577180,
+      "_nanoseconds": 0
+    }
+  },
+  {
+    "_id": "oheY9caqZStC0X0qs3C9",
+    "title": "Notifiation testing",
+    "message": "It is working",
+    "priority": "normal",
+    "createdAt": {
+      "_seconds": 1772372801,
+      "_nanoseconds": 634000000
+    },
+    "expiresAt": {
+      "_seconds": 1772459160,
+      "_nanoseconds": 0
+    }
+  },
+  {
+    "_id": "sgwSzER4nVjx9DfslEDo",
+    "title": "notice",
+    "message": "all the best",
+    "priority": "urgent",
+    "createdAt": {
+      "_seconds": 1772363664,
+      "_nanoseconds": 357000000
+    },
+    "expiresAt": {
+      "_seconds": 1772450040,
+      "_nanoseconds": 0
+    }
+  }
+]
