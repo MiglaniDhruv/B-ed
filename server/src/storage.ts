@@ -84,15 +84,6 @@ const TTL = {
   USER: 5 * 60_000,
 };
 
-// ─── Helper: convert Mongoose doc to plain object with string id ──────────────
-function toId<T extends { _id: any; toObject?: () => any }>(
-  doc: T
-): Omit<T, "_id"> & { id: string } {
-  const obj = doc.toObject ? doc.toObject() : { ...doc };
-  const { _id, __v, ...rest } = obj;
-  return { id: String(_id), ...rest };
-}
-
 // ─── Student Type ─────────────────────────────────────────────────────────────
 export interface Student {
   id: string;
@@ -609,8 +600,17 @@ export class MongoStorage implements IStorage {
     };
   }
 
+  // ✅ FIX: null → 0/undefined to match Mongoose schema types
   async createAttempt(data: Omit<QuizAttempt, "id" | "submittedAt">) {
-    const doc = await QuizAttemptModel.create({ ...data, submittedAt: new Date() });
+    const doc = await QuizAttemptModel.create({
+      quizId: data.quizId,
+      userId: data.userId,
+      answers: data.answers ?? {},
+      score: data.score ?? 0,
+      totalQuestions: data.totalQuestions ?? 0,
+      timeTaken: data.timeTaken ?? undefined,
+      submittedAt: new Date(),
+    });
     cache.invalidate(`attempt_${data.userId}_${data.quizId}`);
     return this.docToAttempt(doc.toObject());
   }

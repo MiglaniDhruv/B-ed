@@ -10,7 +10,7 @@ function generateId(): string {
 }
 
 // ─── USER ─────────────────────────────────────────────────────────────────────
-export interface IUser extends Document {
+export interface IUser extends Omit<Document, '_id'> {
   _id: string;
   username: string;
   email: string;
@@ -42,7 +42,7 @@ export const UserModel: Model<IUser> =
   mongoose.models.User || mongoose.model<IUser>("User", UserSchema, "users");
 
 // ─── STUDENT ──────────────────────────────────────────────────────────────────
-export interface IStudent extends Document {
+export interface IStudent extends Omit<Document, '_id'> {
   _id: string;
   name: string;
   email: string;
@@ -70,7 +70,6 @@ const StudentSchema = new Schema<IStudent>(
   { timestamps: { createdAt: true, updatedAt: false }, _id: false }
 );
 
-// Indexes for fast lookups
 StudentSchema.index({ email: 1 });
 StudentSchema.index({ phone: 1 });
 
@@ -78,7 +77,7 @@ export const StudentModel: Model<IStudent> =
   mongoose.models.Student || mongoose.model<IStudent>("Student", StudentSchema, "students");
 
 // ─── SUBJECT ──────────────────────────────────────────────────────────────────
-export interface ISubject extends Document {
+export interface ISubject extends Omit<Document, '_id'> {
   _id: string;
   semesterNumber: number;
   name: string;
@@ -107,7 +106,7 @@ export const SubjectModel: Model<ISubject> =
   mongoose.models.Subject || mongoose.model<ISubject>("Subject", SubjectSchema, "subjects");
 
 // ─── UNIT ─────────────────────────────────────────────────────────────────────
-export interface IUnit extends Document {
+export interface IUnit extends Omit<Document, '_id'> {
   _id: string;
   subjectId: string;
   title: string;
@@ -132,7 +131,7 @@ export const UnitModel: Model<IUnit> =
   mongoose.models.Unit || mongoose.model<IUnit>("Unit", UnitSchema, "units");
 
 // ─── STUDY MATERIAL ───────────────────────────────────────────────────────────
-export interface IStudyMaterial extends Document {
+export interface IStudyMaterial extends Omit<Document, '_id'> {
   _id: string;
   unitId: string;
   title: string;
@@ -168,7 +167,7 @@ export const StudyMaterialModel: Model<IStudyMaterial> =
   mongoose.model<IStudyMaterial>("StudyMaterial", StudyMaterialSchema, "studyMaterials");
 
 // ─── QUIZ ─────────────────────────────────────────────────────────────────────
-export interface IQuiz extends Document {
+export interface IQuiz extends Omit<Document, '_id'> {
   _id: string;
   subjectId: string;
   title: string;
@@ -199,7 +198,7 @@ export const QuizModel: Model<IQuiz> =
   mongoose.models.Quiz || mongoose.model<IQuiz>("Quiz", QuizSchema, "quizzes");
 
 // ─── QUESTION ─────────────────────────────────────────────────────────────────
-export interface IQuestion extends Document {
+export interface IQuestion extends Omit<Document, '_id'> {
   _id: string;
   questionText: string;
   options: string[];
@@ -228,7 +227,7 @@ export const QuestionModel: Model<IQuestion> =
   mongoose.models.Question || mongoose.model<IQuestion>("Question", QuestionSchema, "questions");
 
 // ─── QUIZ-QUESTION LINK (join table) ──────────────────────────────────────────
-export interface IQuizQuestion extends Document {
+export interface IQuizQuestion extends Omit<Document, '_id'> {
   _id: string;
   quizId: string;
   questionId: string;
@@ -254,7 +253,7 @@ export const QuizQuestionModel: Model<IQuizQuestion> =
   mongoose.model<IQuizQuestion>("QuizQuestion", QuizQuestionSchema, "quizQuestions");
 
 // ─── QUIZ ATTEMPT ─────────────────────────────────────────────────────────────
-export interface IQuizAttempt extends Document {
+export interface IQuizAttempt extends Omit<Document, '_id'> {
   _id: string;
   quizId: string;
   userId: string;
@@ -288,7 +287,7 @@ export const QuizAttemptModel: Model<IQuizAttempt> =
   mongoose.model<IQuizAttempt>("QuizAttempt", QuizAttemptSchema, "quizAttempts");
 
 // ─── GLOBAL NOTIFICATION ─────────────────────────────────────────────────────
-export interface IGlobalNotification extends Document {
+export interface IGlobalNotification extends Omit<Document, '_id'> {
   _id: string;
   title: string;
   message: string;
@@ -327,7 +326,7 @@ export const GlobalNotificationModel: Model<IGlobalNotification> =
   );
 
 // ─── NOTICE ───────────────────────────────────────────────────────────────────
-export interface INotice extends Document {
+export interface INotice extends Omit<Document, '_id'> {
   _id: string;
   title: string;
   message: string;
@@ -352,7 +351,7 @@ export const NoticeModel: Model<INotice> =
   mongoose.models.Notice || mongoose.model<INotice>("Notice", NoticeSchema, "notices");
 
 // ─── PASSWORD RESET TOKEN ─────────────────────────────────────────────────────
-export interface IPasswordResetToken extends Document {
+export interface IPasswordResetToken extends Omit<Document, '_id'> {
   _id: string;
   userId: string;
   token: string;
@@ -373,7 +372,6 @@ const PasswordResetTokenSchema = new Schema<IPasswordResetToken>(
   { _id: false }
 );
 
-// Auto-delete tokens after expiry (MongoDB TTL index)
 PasswordResetTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 export const PasswordResetTokenModel: Model<IPasswordResetToken> =
@@ -385,7 +383,7 @@ export const PasswordResetTokenModel: Model<IPasswordResetToken> =
   );
 
 // ─── FCM TOKEN ────────────────────────────────────────────────────────────────
-export interface IFcmToken extends Document {
+export interface IFcmToken extends Omit<Document, '_id'> {
   _id: string;
   userId: string;
   token: string;
