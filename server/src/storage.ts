@@ -68,8 +68,8 @@ const TTL = {
   SEMESTER_STATS: 5 * 60_000, //  5 min  (was 30 sec)
   QUIZZES: 5 * 60_000, //  5 min  (was 30 sec)
   STUDENTS: 3 * 60_000, //  3 min  (was 15 sec)
-  NOTIFICATIONS: 2 * 60_000, //  2 min  (new)
-  ADMIN_STATS: 2 * 60_000, //  2 min  (new)
+  NOTIFICATIONS: 5 * 60_000, //  2 min  (new)
+  ADMIN_STATS: 3 * 60_000, //  2 min  (new)
   ANALYTICS: 2 * 60_000, //  2 min  (new)
 };
 
@@ -1152,7 +1152,7 @@ export class FirestoreStorage implements IStorage {
 
     const snap = await this.db
       .collection("globalNotifications")
-      .limit(50)
+      .limit(20)
       .get();
 
     const result = snap.docs

@@ -370,19 +370,19 @@ export function TeacherDashboard({ onBack }: TeacherDashboardProps) {
     }
   };
 
-const handleDownloadQuizPdf = async (quiz: Quiz) => {
-  try {
-    // Step 1: get question IDs linked to this quiz (no correctAnswer)
-    const quizQs = await api.getQuizQuestions(quiz.id);
+  const handleDownloadQuizPdf = async (quiz: Quiz) => {
+    try {
+      // Step 1: get question IDs linked to this quiz (no correctAnswer)
+      const quizQs = await api.getQuizQuestions(quiz.id);
 
-    // Step 2: get ALL questions from admin endpoint (includes correctAnswer)
-    const allQs = await api.getAllQuestions();
+      // Step 2: get ALL questions from admin endpoint (includes correctAnswer)
+      const allQs = await api.getAllQuestions();
 
-    // Step 3: merge — use full admin data so correctAnswer is present
-    const fullMap = new Map(allQs.map((q) => [q.id, q]));
-    const questions = quizQs.map((q) => fullMap.get(q.id) ?? q);
+      // Step 3: merge — use full admin data so correctAnswer is present
+      const fullMap = new Map(allQs.map((q) => [q.id, q]));
+      const questions = quizQs.map((q) => fullMap.get(q.id) ?? q);
 
-    const htmlContent = `
+      const htmlContent = `
     <!DOCTYPE html>
     <html>
       <head>
@@ -456,24 +456,125 @@ const handleDownloadQuizPdf = async (quiz: Quiz) => {
     </html>
   `;
 
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      alert("Please allow popups to download the PDF.");
-      return;
+      const printWindow = window.open("", "_blank");
+      if (!printWindow) {
+        alert("Please allow popups to download the PDF.");
+        return;
+      }
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
+      printWindow.onload = () => {
+        setTimeout(() => {
+          printWindow.focus();
+          printWindow.print();
+        }, 1000);
+      };
+    } catch (err) {
+      alert("Failed to generate PDF");
+      console.error(err);
     }
-    printWindow.document.write(htmlContent);
-    printWindow.document.close();
-    printWindow.onload = () => {
-      setTimeout(() => {
-        printWindow.focus();
-        printWindow.print();
-      }, 1000);
-    };
-  } catch (err) {
-    alert("Failed to generate PDF");
-    console.error(err);
-  }
-};
+  };
+  const handleDownloadQuizWord = async (quiz: Quiz) => {
+    try {
+      const quizQs = await api.getQuizQuestions(quiz.id);
+      const allQs = await api.getAllQuestions();
+      const fullMap = new Map(allQs.map((q) => [q.id, q]));
+      const questions = quizQs.map((q) => fullMap.get(q.id) ?? q);
+
+      const htmlContent = `
+      <!DOCTYPE html>
+      <html xmlns:o='urn:schemas-microsoft-com:office:office'
+            xmlns:w='urn:schemas-microsoft-com:office:word'
+            xmlns='http://www.w3.org/TR/REC-html40'>
+        <head>
+          <meta charset="UTF-8" />
+          <link rel="preconnect" href="https://fonts.googleapis.com" />
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+          <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;600;700&family=Noto+Sans+Devanagari:wght@400;600;700&family=Noto+Sans+Gujarati:wght@400;600;700&display=swap" rel="stylesheet" />
+          <style>
+            body {
+              font-family: 'Noto Sans Gujarati', 'Noto Sans Devanagari', 'Noto Sans', Arial, sans-serif;
+              padding: 40px; color: #000; font-size: 13px; line-height: 1.7;
+            }
+            h1 { text-align: center; font-size: 20px; font-weight: 700; margin-bottom: 6px; }
+            .meta { text-align: center; font-size: 11px; color: #555; margin-bottom: 20px; }
+            hr { border: none; border-top: 1.5px solid #333; margin-bottom: 24px; }
+            .question { margin-bottom: 22px; page-break-inside: avoid; }
+            .question-text { font-weight: 600; font-size: 13px; margin-bottom: 8px; }
+            .options { padding-left: 24px; }
+            .option { margin-bottom: 4px; font-size: 12px; }
+            .answer-title { text-align: center; font-size: 18px; font-weight: 700; margin-bottom: 20px; margin-top: 30px; }
+            .answer-row { font-size: 12px; margin-bottom: 6px; }
+            .answer-correct { font-weight: 600; color: #16a34a; }
+          </style>
+        </head>
+        <body>
+          <h1>${quiz.title}</h1>
+          <div class="meta">
+            Duration: ${quiz.duration ?? "—"} min &nbsp;|&nbsp;
+            Questions: ${questions.length}
+          </div>
+          <hr />
+
+          ${questions
+            .map(
+              (q, idx) => `
+            <div class="question">
+              <div class="question-text">Q${idx + 1}. ${q.questionText}</div>
+              <div class="options">
+                ${q.options
+                  .map(
+                    (opt, i) => `
+                  <div class="option">${String.fromCharCode(65 + i)}. ${opt}</div>
+                `,
+                  )
+                  .join("")}
+              </div>
+            </div>
+          `,
+            )
+            .join("")}
+
+          <div style="padding-top: 10px; margin-top: 20px;">
+            <div class="answer-title">Answer Key</div>
+            <hr />
+            <table style="width: 100%; border-collapse: collapse;">
+              <tbody>
+                ${questions
+                  .map((q, idx) => {
+                    const ansIdx = q.correctAnswer ?? 0;
+                    const letter = String.fromCharCode(65 + ansIdx);
+                    const text = q.options?.[ansIdx] ?? "";
+                    return `
+                    <tr>
+                      <td style="width: 40px; font-size: 12px; padding: 3px 8px 3px 0; vertical-align: top;">${idx + 1}.</td>
+                      <td style="font-size: 12px; padding: 3px 0; color: #16a34a; font-weight: 600; vertical-align: top;">${letter}. ${text}</td>
+                    </tr>`;
+                  })
+                  .join("")}
+              </tbody>
+            </table>
+          </div>
+        </body>
+      </html>
+    `;
+
+      const blob = new Blob(["\ufeff", htmlContent], {
+        type: "application/msword",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${quiz.title.replace(/[^a-z0-9]/gi, "_")}.doc`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert("Failed to generate Word file");
+      console.error(err);
+    }
+  };
   const tabs = [
     { id: "dashboard", label: "Overview", icon: Grid3x3 },
     { id: "materials", label: "Materials", icon: FileText },
@@ -956,7 +1057,13 @@ const handleDownloadQuizPdf = async (quiz: Quiz) => {
                     >
                       <FileText className="w-4 h-4" />
                     </button>
-
+                    <button
+                      onClick={() => handleDownloadQuizWord(quiz)}
+                      title="Download Word"
+                      className="p-2 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors"
+                    >
+                      <Download className="w-4 h-4" />
+                    </button>
                     {!quiz.isActive ? (
                       <Button
                         onClick={() => handlePublishQuiz(quiz.id)}
