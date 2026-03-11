@@ -95,13 +95,9 @@ function generatePrintPDF(selectedQuestions: Question[]) {
           .option { margin-bottom: 4px; font-size: 12px; }
 
           /* Answer key page */
-          .answer-page { page-break-before: always; padding-top: 10px; }
-          .answer-title {
-            text-align: center;
-            font-size: 18px;
-            font-weight: 700;
-            margin-bottom: 20px;
-          }
+.answer-title { text-align: center; font-size: 18px; font-weight: 700; margin-bottom: 20px; }
+.answer-row { font-size: 12px; margin-bottom: 6px; }
+.answer-correct { font-weight: 600; color: #16a34a; }
           .answer-row { font-size: 12px; margin-bottom: 6px; }
           .answer-correct { font-weight: 600; color: #16a34a; }
 
@@ -176,7 +172,102 @@ function generatePrintPDF(selectedQuestions: Question[]) {
     }, 1000);
   };
 }
+function generateWordDoc(selectedQuestions: Question[]) {
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html xmlns:o='urn:schemas-microsoft-com:office:office'
+          xmlns:w='urn:schemas-microsoft-com:office:word'
+          xmlns='http://www.w3.org/TR/REC-html40'>
+      <head>
+        <meta charset="UTF-8" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;600;700&family=Noto+Sans+Devanagari:wght@400;600;700&family=Noto+Sans+Gujarati:wght@400;600;700&display=swap" rel="stylesheet" />
+        <style>
+          body {
+            font-family: 'Noto Sans Gujarati', 'Noto Sans Devanagari', 'Noto Sans', Arial, sans-serif;
+            padding: 40px;
+            color: #000;
+            font-size: 13px;
+            line-height: 1.7;
+          }
+          h1 {
+            text-align: center;
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 4px;
+          }
+          hr { border: none; border-top: 1.5px solid #333; margin-bottom: 24px; }
+          .question { margin-bottom: 22px; page-break-inside: avoid; }
+          .question-text { font-weight: 600; font-size: 13px; margin-bottom: 8px; }
+          .options { padding-left: 24px; }
+          .option { margin-bottom: 4px; font-size: 12px; }
+          .answer-page { page-break-before: always; padding-top: 10px; }
+          .answer-title { text-align: center; font-size: 18px; font-weight: 700; margin-bottom: 20px; }
+          .answer-row { font-size: 12px; margin-bottom: 6px; }
+          .answer-correct { font-weight: 600; color: #16a34a; }
+        </style>
+      </head>
+      <body>
+        <h1>Quiz Paper</h1>
+        <hr />
 
+        ${selectedQuestions
+          .map(
+            (q, idx) => `
+          <div class="question">
+            <div class="question-text">${idx + 1}. ${q.questionText}</div>
+            <div class="options">
+              ${q.options
+                .map(
+                  (opt, i) => `
+                <div class="option">${String.fromCharCode(65 + i)}. ${opt}</div>
+              `,
+                )
+                .join("")}
+            </div>
+          </div>
+        `,
+          )
+          .join("")}
+
+<div style="padding-top: 10px; margin-top: 10px;">
+          <div class="answer-title">Answer Key</div>
+          <hr />
+          <table style="width: 100%; border-collapse: collapse;">
+            <tbody>
+              ${selectedQuestions
+                .map((q, idx) => {
+                  const ansIdx = q.correctAnswer ?? 0;
+                  const letter = String.fromCharCode(65 + ansIdx);
+                  const text = q.options?.[ansIdx] ?? "";
+                  return `
+                  <tr>
+                    <td style="width: 40px; font-size: 12px; padding: 3px 8px 3px 0; vertical-align: top;">${idx + 1}.</td>
+                    <td style="font-size: 12px; padding: 3px 0; color: #16a34a; font-weight: 600; vertical-align: top;">${letter}. ${text}</td>
+                  </tr>`;
+                })
+                .join("")}
+            </tbody>
+          </table>
+        </div>
+      </body>
+    </html>
+  `;
+
+  // HTML ko blob banao Word format mein
+  const blob = new Blob(["\ufeff", htmlContent], {
+    type: "application/msword",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "quiz-paper.doc";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
 export function QuestionBankView() {
   const {
     questions,
@@ -309,6 +400,7 @@ export function QuestionBankView() {
 
   // ✅ hooks.ts already sorts oldest→newest, so just add difficulty metadata.
   // Then reverse here so newest question appears at the TOP of the list.
+
   const enriched = questions.map((q) => ({
     ...q,
     difficulty: parseMetadata(q.explanation).difficulty || "easy",
@@ -323,9 +415,17 @@ export function QuestionBankView() {
     return matchesSearch && matchesDifficulty;
   });
 
-  // Newest first for display
   const displayList = [...filtered].reverse();
 
+  // ✅ YE TEEN LINES displayList ke BAAD aayengi
+  const allFilteredIds = displayList.map((q) => q.id);
+  const isAllSelected =
+    allFilteredIds.length > 0 &&
+    allFilteredIds.every((id) => selectedIds.includes(id));
+  const handleSelectAll = () => {
+    if (isAllSelected) setSelectedIds([]);
+    else setSelectedIds(allFilteredIds);
+  };
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -365,8 +465,14 @@ export function QuestionBankView() {
                 onClick={() => setSelectionMode(true)}
                 className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg flex items-center gap-2 transition-colors flex-shrink-0 text-sm"
               >
-                <FileText className="w-4 h-4" />
-                <span className="hidden sm:inline">Generate PDF</span>
+                <Button
+                  onClick={() => setSelectionMode(true)}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg flex items-center gap-2 transition-colors flex-shrink-0 text-sm"
+                >
+                  <FileText className="w-4 h-4" />
+                  <span className="hidden sm:inline">Generate Paper</span>
+                  <span className="sm:hidden">Paper</span>
+                </Button>
               </Button>
               <Button
                 onClick={() => setIsAdding(true)}
@@ -387,10 +493,30 @@ export function QuestionBankView() {
                 <span className="hidden sm:inline">
                   Download PDF ({selectedIds.length})
                 </span>
-                <span className="sm:hidden">
-                  Download ({selectedIds.length})
-                </span>
+                <span className="sm:hidden">PDF ({selectedIds.length})</span>
               </Button>
+
+              {/* ✅ NEW: Word download button */}
+              <Button
+                onClick={() => {
+                  if (selectedIds.length === 0) {
+                    alert("Please select at least one question");
+                    return;
+                  }
+                  const selectedQuestions = selectedIds
+                    .map((id) => questions.find((q) => q.id === id))
+                    .filter(Boolean) as Question[];
+                  generateWordDoc(selectedQuestions);
+                }}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg flex items-center gap-2 transition-colors text-sm"
+              >
+                <FileText className="w-4 h-4" />
+                <span className="hidden sm:inline">
+                  Download Word ({selectedIds.length})
+                </span>
+                <span className="sm:hidden">Word ({selectedIds.length})</span>
+              </Button>
+
               <Button
                 onClick={() => {
                   setSelectionMode(false);
@@ -430,7 +556,20 @@ export function QuestionBankView() {
           ))}
         </select>
       </div>
-
+      {/* ✅ Select All bar — sirf selection mode mein dikhega */}
+      {selectionMode && (
+        <div className="flex items-center justify-between px-3 py-2 bg-indigo-50 border border-indigo-200 rounded-lg mb-4">
+          <span className="text-sm text-indigo-700">
+            {selectedIds.length} of {displayList.length} selected
+          </span>
+          <button
+            onClick={handleSelectAll}
+            className="text-sm font-medium text-indigo-600 hover:text-indigo-800 transition-colors"
+          >
+            {isAllSelected ? "Deselect All" : "Select All"}
+          </button>
+        </div>
+      )}
       {/* Add / Edit Form */}
       {isAdding && (
         <Card className="p-5 bg-white border border-slate-200 rounded-lg mb-6">
@@ -590,6 +729,7 @@ export function QuestionBankView() {
             >
               <div className="flex items-start gap-3">
                 {/* Checkbox in selection mode */}
+                {/* // Ye existing buttons ke saath add karo (Cancel se pehle): */}
                 {selectionMode && (
                   <input
                     type="checkbox"
@@ -598,7 +738,6 @@ export function QuestionBankView() {
                     className="mt-1 w-4 h-4 flex-shrink-0 cursor-pointer accent-indigo-600"
                   />
                 )}
-
                 {/* Content — clicking card selects in selection mode */}
                 <div
                   className="flex-1 min-w-0"
@@ -651,7 +790,6 @@ export function QuestionBankView() {
                     ))}
                   </div>
                 </div>
-
                 {/* Actions — hidden in selection mode */}
                 {!selectionMode && (
                   <div className="flex flex-col gap-1.5 flex-shrink-0">

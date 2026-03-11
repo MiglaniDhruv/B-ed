@@ -307,36 +307,48 @@ export function useQuizzes() {
 }
 
 // ─── Quiz Questions (Student-facing) ──────────────────────────────────────────
+// export function useQuizQuestions(quizId: string | null) {
+//   const { authVersion } = useAuth();
+//   const [questions, setQuestions] = useState<Question[]>([]);
+//   const [loading, setLoading] = useState(true);
+//   const [error, setError] = useState<string | null>(null);
+
+//   const fetchQuestions = async () => {
+//     if (!quizId) {
+//       setQuestions([]);
+//       setLoading(false);
+//       return;
+//     }
+//     try {
+//       setLoading(true);
+//       const data = await studentApi.getQuizQuestions(quizId);
+//       setQuestions(data);
+//       setError(null);
+//     } catch (err: any) {
+//       setError(err.message);
+//     } finally {
+//       setLoading(false);
+//     }
+//   };
+
+//   useEffect(() => {
+//     fetchQuestions();
+//   }, [authVersion, quizId]);
+//   return { questions, loading, error, refetch: fetchQuestions };
+// }
 export function useQuizQuestions(quizId: string | null) {
   const { authVersion } = useAuth();
-  const [questions, setQuestions] = useState<Question[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const cacheKey = quizId ? `quiz_questions_${quizId}` : null;
 
-  const fetchQuestions = async () => {
-    if (!quizId) {
-      setQuestions([]);
-      setLoading(false);
-      return;
-    }
-    try {
-      setLoading(true);
-      const data = await studentApi.getQuizQuestions(quizId);
-      setQuestions(data);
-      setError(null);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data, loading, error, refetch } = useCachedFetch(
+    cacheKey,
+    () => studentApi.getQuizQuestions(quizId!),
+    5 * 60 * 1000, // 5 min TTL
+    [authVersion, quizId],
+  );
 
-  useEffect(() => {
-    fetchQuestions();
-  }, [authVersion, quizId]);
-  return { questions, loading, error, refetch: fetchQuestions };
+  return { questions: data ?? [], loading, error, refetch };
 }
-
 // ─── Admin Questions ──────────────────────────────────────────────────────────
 export function useAdminQuestions(quizId?: string) {
   const { authVersion } = useAuth();

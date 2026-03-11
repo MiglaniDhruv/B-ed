@@ -9,17 +9,27 @@ const CACHE_PREFIX = "app_cache_";
 const MAX_CACHE_BYTES = 10 * 1024 * 1024; // 10MB
 
 // Default TTLs (ms)
-export const CACHE_TTL = {
-  SEMESTERS:  60 * 60 * 1000,      // 1 hour  — basically static
-  SUBJECTS:   30 * 60 * 1000,      // 30 min
-  UNITS:      30 * 60 * 1000,      // 30 min
-  MATERIALS:  30 * 60 * 1000,      // 30 min
-  QUIZZES:    10 * 60 * 1000,      // 10 min  — changes more often
-  PROFILE:    60 * 60 * 1000,      // 1 hour
-  NOTICES:     5 * 60 * 1000,      // 5 min   — time-sensitive
-  ATTEMPTS:    5 * 60 * 1000,      // 5 min
-};
+// export const CACHE_TTL = {
+//   SEMESTERS:  60 * 60 * 1000,      // 1 hour  — basically static
+//   SUBJECTS:   30 * 60 * 1000,      // 30 min
+//   UNITS:      30 * 60 * 1000,      // 30 min
+//   MATERIALS:  30 * 60 * 1000,      // 30 min
+//   QUIZZES:    10 * 60 * 1000,      // 10 min  — changes more often
+//   PROFILE:    60 * 60 * 1000,      // 1 hour
+//   NOTICES:     5 * 60 * 1000,      // 5 min   — time-sensitive
+//   ATTEMPTS:    5 * 60 * 1000,      // 5 min
+// };
 
+export const CACHE_TTL = {
+  SEMESTERS:  24 * 60 * 60 * 1000,  // 24h (was 1h) — never changes
+  SUBJECTS:    2 * 60 * 60 * 1000,  // 2h  (was 30m)
+  UNITS:       2 * 60 * 60 * 1000,  // 2h  (was 30m)
+  MATERIALS:   2 * 60 * 60 * 1000,  // 2h  (was 30m)
+  QUIZZES:    30 * 60 * 1000,        // 30m (was 10m)
+  PROFILE:    24 * 60 * 60 * 1000,  // 24h (was 1h)
+  NOTICES:    15 * 60 * 1000,        // 15m (was 5m)
+  ATTEMPTS:   10 * 60 * 1000,        // 10m (was 5m)
+};
 interface CacheEntry<T> {
   data: T;
   cachedAt: number;

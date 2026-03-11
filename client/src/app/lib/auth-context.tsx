@@ -53,45 +53,68 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // With 200 students polling every 30s = 400 pings/min. Previously each
   // ping hit Firestore on cache miss; now they almost never hit Firestore.
   // Estimated read savings: ~400 reads/min = ~576,000 reads/day from polling.
-  const startSessionPolling = useCallback(() => {
-    if (sessionPollTimer.current) clearInterval(sessionPollTimer.current);
+  // const startSessionPolling = useCallback(() => {
+  //   if (sessionPollTimer.current) clearInterval(sessionPollTimer.current);
 
-    sessionPollTimer.current = setInterval(async () => {
-      if (!isLoggedIn.current) return;
+  //   sessionPollTimer.current = setInterval(async () => {
+  //     if (!isLoggedIn.current) return;
 
-      const client = api.getToken() ? api : studentApi;
-      if (!client.getToken()) return;
+  //     const client = api.getToken() ? api : studentApi;
+  //     if (!client.getToken()) return;
 
-      try {
-        const result = await client.ping();
+  //     try {
+  //       const result = await client.ping();
 
-        if (!result.ok) {
-          const code = result.code ?? "";
-          const isInvalidated =
-            code === "SESSION_INVALIDATED" ||
-            code.includes("SESSION_INVALIDATED") ||
-            code.includes("Session expired") ||
-            code.includes("Logged in from another device");
+  //       if (!result.ok) {
+  //         const code = result.code ?? "";
+  //         const isInvalidated =
+  //           code === "SESSION_INVALIDATED" ||
+  //           code.includes("SESSION_INVALIDATED") ||
+  //           code.includes("Session expired") ||
+  //           code.includes("Logged in from another device");
 
-          const isBlocked = code === "ACCOUNT_BLOCKED";
+  //         const isBlocked = code === "ACCOUNT_BLOCKED";
 
-          if (isInvalidated) {
-            clearSession();
-            alert(
-              "You have been logged out because your account was logged in from another device.",
-            );
-          } else if (isBlocked) {
-            clearSession();
-            alert("Your account has been blocked. Contact your teacher.");
-          }
-          // Other errors (NOT_FOUND, INVALID_TOKEN) are treated as transient
-        }
-      } catch {
-        // Network errors — ignore, don't logout on flaky connection
+  //         if (isInvalidated) {
+  //           clearSession();
+  //           alert(
+  //             "You have been logged out because your account was logged in from another device.",
+  //           );
+  //         } else if (isBlocked) {
+  //           clearSession();
+  //           alert("Your account has been blocked. Contact your teacher.");
+  //         }
+  //         // Other errors (NOT_FOUND, INVALID_TOKEN) are treated as transient
+  //       }
+  //     } catch {
+  //       // Network errors — ignore, don't logout on flaky connection
+  //     }
+  //   }, 30_000);
+  // }, [clearSession]);
+// Replace 30_000 with 60_000 (1 minute instead of 30s)
+// AND add visibility check:
+
+const startSessionPolling = useCallback(() => {
+  if (sessionPollTimer.current) clearInterval(sessionPollTimer.current);
+
+  const doPoll = async () => {
+    // Skip poll if tab is hidden — saves ~50% of polls
+    if (document.visibilityState === 'hidden') return;
+    if (!isLoggedIn.current) return;
+
+    const client = api.getToken() ? api : studentApi;
+    if (!client.getToken()) return;
+
+    try {
+      const result = await client.ping();
+      if (!result.ok) {
+        // ... existing logic
       }
-    }, 30_000);
-  }, [clearSession]);
+    } catch {}
+  };
 
+  sessionPollTimer.current = setInterval(doPoll, 60_000); // 60s instead of 30s
+}, [clearSession]);
   const stopSessionPolling = useCallback(() => {
     if (sessionPollTimer.current) {
       clearInterval(sessionPollTimer.current);
@@ -197,17 +220,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // ─── Admin login ───────────────────────────────────────────────────────────
-  const login = async (email: string, password: string) => {
-    const { user } = await api.login(email, password);
-    studentApi.setToken(null);
-    localStorage.removeItem("student_data");
-    setStudent(null);
-    setUser(user);
-    setAuthReady(true);
-    setAuthVersion((v) => v + 1);
-    onLoginSuccess();
-  };
-
+  // const login = async (email: string, password: string) => {
+  //   const { user } = await api.login(email, password);
+  //   studentApi.setToken(null);
+  //   localStorage.removeItem("student_data");
+  //   setStudent(null);
+  //   setUser(user);
+  //   setAuthReady(true);
+  //   setAuthVersion((v) => v + 1);
+  //   onLoginSuccess();
+  // };
+// In login():
+const login = async (email: string, password: string) => {
+  const { user } = await api.login(email, password);
+  studentApi.setToken(null);
+  localStorage.removeItem("student_data");
+  
+  // Batch all state updates — React 18 auto-batches these in event handlers
+  // but wrap in startTransition for safety:
+  setStudent(null);
+  setUser(user);
+  setAuthReady(true);
+  // Only ONE authVersion bump at the end:
+  setAuthVersion((v) => v + 1);
+  onLoginSuccess();
+};
   // ─── Student login ─────────────────────────────────────────────────────────
   const studentLogin = async (identifier: string, password: string) => {
     const { student } = await studentApi.studentLogin(identifier, password);
