@@ -6,7 +6,8 @@ import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import multer from "multer";
 import { storage } from "./storage.js";
-import { getFirestore, getStorage } from "./firebase.js";
+import { QuizQuestionModel, GlobalNotificationModel } from "./model/model.js";
+import mongoose from "mongoose";
 import { sendPasswordResetEmail } from "./email.js";
 
 import { broadcastPush, saveFcmToken, removeFcmToken } from "./lib/fcm.js";
@@ -30,14 +31,9 @@ const JWT_SECRET =
   crypto.randomBytes(32).toString("hex");
 
 // ─── L1 session cache: userId → sessionToken ──────────────────────────────────
-// Warms up on first DB hit, invalidated on login/logout/block/password-reset.
-// Server restarts clear it — requireAuth falls back to DB safely.
 const sessionCache = new Map<string, string>();
 
 // ─── Route-level cache for /api/semesters ────────────────────────────────────
-// This endpoint calls getSemesterStats() for each semester which is expensive
-// (multiple Firestore queries). Cache at the route level so all students
-// hitting the home screen simultaneously share one result set.
 interface RouteCacheEntry<T> {
   data: T;
   expiresAt: number;
@@ -114,8 +110,7 @@ async function requireAuth(req: Request, res: Response, next: NextFunction) {
       return next();
     }
 
-    // Slow path: cache miss — hit DB (getUser/getStudentById are now cached
-    // in storage.ts for 5 min, so this is only truly slow on first hit)
+    // Slow path: cache miss — hit DB
     const user =
       (await storage.getUser(userId)) || (await storage.getStudentById(userId));
 
@@ -207,24 +202,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const file = req.file;
         if (!file) return res.status(400).json({ message: "No file provided" });
 
-        const bucket = getStorage();
+        const { GridFSBucket } = await import("mongodb");
+        const bucket = new GridFSBucket(mongoose.connection.db!, { bucketName: "pdfs" });
         const originalName = (req.body.fileName || file.originalname).replace(
           /[^a-zA-Z0-9._-]/g,
           "_",
         );
         const fileName = `study-materials/${Date.now()}_${originalName}`;
-        const fileRef = bucket.file(fileName);
 
-        await fileRef.save(file.buffer, {
+        // Upload to MongoDB GridFS bucket
+        const uploadStream = bucket.openUploadStream(fileName, {
           metadata: {
             contentType: "application/pdf",
             contentDisposition: "inline",
           },
         });
 
-        await fileRef.makePublic();
+        uploadStream.end(file.buffer);
 
-        const url = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
+        await new Promise<void>((resolve, reject) => {
+          uploadStream.on("finish", resolve);
+          uploadStream.on("error", reject);
+        });
+
+        const fileId = uploadStream.id.toString();
+        const baseUrl = process.env.APP_BASE_URL || `${req.protocol}://${req.get("host")}`;
+        const url = `${baseUrl}/api/files/${fileId}`;
+
         res.json({ url });
       } catch (err: any) {
         console.error("PDF upload error:", err);
@@ -232,6 +236,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     },
   );
+
+  // ========== FILE SERVE (GridFS) ==========
+  app.get("/api/files/:fileId", async (req: Request, res: Response) => {
+    try {
+      const { GridFSBucket, ObjectId } = await import("mongodb");
+      const bucket = new GridFSBucket(mongoose.connection.db!, { bucketName: "pdfs" });
+      const fileId = new ObjectId(req.params.fileId);
+
+      const files = await bucket.find({ _id: fileId }).toArray();
+      if (!files.length) return res.status(404).json({ message: "File not found" });
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", "inline");
+
+      const downloadStream = bucket.openDownloadStream(fileId);
+      downloadStream.pipe(res);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "File fetch failed" });
+    }
+  });
 
   // ========== USER MANAGEMENT ==========
   app.post("/api/admin/users", requireAdminAuth, async (req, res) => {
@@ -385,12 +409,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     req.session.destroy(() => res.json({ message: "Logged out" }));
   });
 
-  // ─── /api/auth/me ─────────────────────────────────────────────────────────
-  // OPTIMIZATION: Eliminated the double DB fetch that existed before.
-  // Previously: validate sessionToken (1 DB read) → then fetch user AGAIN
-  // (1 more DB read) = 2 reads per /me call. Now: validate from session
-  // cache (0 reads on warm cache) or 1 DB read on miss, and reuse that
-  // result directly — no second fetch.
   app.get("/api/auth/me", async (req, res) => {
     let userId: string | undefined;
     let tokenSession: string | undefined;
@@ -423,7 +441,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
             code: "SESSION_INVALIDATED",
           });
         }
-        // Token validated from cache — fetch user (cached in storage.ts)
         const user = await storage.getUser(userId);
         if (user) {
           const { password: _, ...safeUser } = user;
@@ -449,7 +466,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "User not found" });
       }
 
-      // Cache miss — fetch from DB once and reuse for both validation and response
       const dbUser =
         (await storage.getUser(userId)) ||
         (await storage.getStudentById(userId));
@@ -475,7 +491,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (dbToken) sessionCache.set(userId, dbToken);
 
-      // Reuse the already-fetched dbUser — no second DB call
       if ("username" in dbUser) {
         const { password: _, ...safeUser } = dbUser as any;
         return res.json({ user: safeUser });
@@ -519,13 +534,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ─── Lightweight session ping ──────────────────────────────────────────────
-  // OPTIMIZATION: auth-context.ts polls every 30 seconds to detect if a user
-  // was logged out from another device. The original /api/auth/me was used for
-  // this, which does a full user fetch. This endpoint only checks the session
-  // token against the in-memory cache — 0 Firestore reads on a warm cache.
-  // Falls back to DB only if cache is cold (server restart).
-  // Client: replace `api.getMe()` / `studentApi.getSemesters()` in the poll
-  // with `GET /api/auth/ping`.
   app.get("/api/auth/ping", async (req, res) => {
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith("Bearer ")) {
@@ -543,7 +551,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ ok: false, code: "INVALID_TOKEN" });
       }
 
-      // Check L1 cache first (0 Firestore reads)
       const cachedToken = sessionCache.get(userId);
       if (cachedToken) {
         if (cachedToken !== tokenSession) {
@@ -554,7 +561,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ ok: true });
       }
 
-      // Cache miss — one DB read to warm up cache
       const user =
         (await storage.getUser(userId)) ||
         (await storage.getStudentById(userId));
@@ -895,10 +901,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ========== SEMESTERS ==========
-  // OPTIMIZATION: Cached at route level for 5 min. getSemesterStats() is
-  // expensive (N+1 Firestore queries). 200 students opening the app
-  // simultaneously now share one set of queries instead of firing 200×N reads.
-  // Cache is invalidated when subjects/units/materials are mutated (see below).
   app.get("/api/semesters", requireAuth, async (_req, res) => {
     try {
       const CACHE_KEY = "route_semesters";
@@ -976,7 +978,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .status(400)
           .json({ message: "Semester number must be between 1 and 5" });
       const result = await storage.createSubject(data);
-      routeCache.invalidate("route_semesters"); // bust semester counts
+      routeCache.invalidate("route_semesters");
       res.json(result);
     } catch (err) {
       if (err instanceof z.ZodError)
@@ -1198,56 +1200,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { answers, timeTaken } = req.body;
 
       const allQuestions = await storage.getQuestionsByQuiz(quizId);
-      if (allQuestions.length === 0)
+
+      if (allQuestions.length === 0) {
         return res.status(400).json({ message: "This quiz has no questions." });
+      }
 
       let score = 0;
       for (const q of allQuestions) {
-        if (answers[q.id] === q.correctAnswer) score++;
+        if (answers[q.id] === q.correctAnswer) {
+          score++;
+        }
       }
 
-      const db = getFirestore();
-      const attemptsRef = db.collection("quizAttempts");
-
-      let attempt: any = null;
-      let alreadyAttempted = false;
-
-      await db.runTransaction(async (t) => {
-        const existingSnap = await t.get(
-          attemptsRef
-            .where("userId", "==", userId)
-            .where("quizId", "==", quizId)
-            .limit(1) as any,
-        );
-
-        if (!existingSnap.empty) {
-          alreadyAttempted = true;
-          return;
-        }
-
-        const newRef = attemptsRef.doc();
-        const now = new Date();
-        const attemptData = {
-          userId,
-          quizId,
-          score,
-          totalQuestions: allQuestions.length,
-          answers,
-          timeTaken,
-          submittedAt: now,
-        };
-        t.set(newRef, attemptData);
-        attempt = { id: newRef.id, ...attemptData };
-      });
-
-      if (alreadyAttempted) {
-        const existing = await storage.getUserAttemptForQuiz(userId, quizId);
+      const existing = await storage.getUserAttemptForQuiz(userId, quizId);
+      if (existing) {
         return res.status(400).json({
           message: "You have already attempted this quiz.",
           code: "ALREADY_ATTEMPTED",
           attempt: existing,
         });
       }
+
+      const attempt = await storage.createAttempt({
+        userId,
+        quizId,
+        score,
+        totalQuestions: allQuestions.length,
+        answers,
+        timeTaken,
+      });
 
       res.json({
         attempt,
@@ -1599,10 +1580,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireAdminAuth,
     async (req, res) => {
       try {
-        const db = getFirestore();
         const { quizId } = req.params;
         const quiz = await storage.getQuizById(quizId);
         if (!quiz) return res.status(404).json({ message: "Quiz not found" });
+
         let questionIds: string[] = req.body.questionIds ?? [];
         if (questionIds.length === 0)
           questionIds = (await storage.getAllQuestions()).map((q) => q.id);
@@ -1613,30 +1594,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
             skipped: 0,
             message: "No questions found to link.",
           });
-        const existingSnap = await db
-          .collection("quizQuestions")
-          .where("quizId", "==", quizId)
-          .get();
-        const alreadyLinked = new Set(
-          existingSnap.docs.map((d) => d.data().questionId as string),
-        );
-        const currentMaxOrder = existingSnap.empty
+
+        const existingDocs = await QuizQuestionModel.find({ quizId }).lean();
+        const alreadyLinked = new Set(existingDocs.map((d) => d.questionId));
+        const currentMaxOrder = existingDocs.length === 0
           ? -1
-          : Math.max(...existingSnap.docs.map((d) => d.data().order ?? 0));
-        let linked = 0,
-          skipped = 0,
-          order = currentMaxOrder + 1;
+          : Math.max(...existingDocs.map((d) => d.order ?? 0));
+
+        let linked = 0, skipped = 0, order = currentMaxOrder + 1;
         for (const questionId of questionIds) {
-          if (alreadyLinked.has(questionId)) {
-            skipped++;
-            continue;
-          }
-          await db
-            .collection("quizQuestions")
-            .add({ quizId, questionId, order });
+          if (alreadyLinked.has(questionId)) { skipped++; continue; }
+          await QuizQuestionModel.create({ quizId, questionId, order });
           order++;
           linked++;
         }
+
         res.json({
           success: true,
           linked,
@@ -1646,9 +1618,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       } catch (err: any) {
         console.error("sync-questions error:", err);
-        res
-          .status(500)
-          .json({ message: err.message || "Failed to sync questions" });
+        res.status(500).json({ message: err.message || "Failed to sync questions" });
       }
     },
   );
@@ -1658,18 +1628,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireAdminAuth,
     async (req, res) => {
       try {
-        const db = getFirestore();
         const { quizId } = req.params;
         const quiz = await storage.getQuizById(quizId);
         if (!quiz) return res.status(404).json({ message: "Quiz not found" });
-        const [allQs, linksSnap] = await Promise.all([
+
+        const [allQs, linkedDocs] = await Promise.all([
           storage.getAllQuestions(),
-          db.collection("quizQuestions").where("quizId", "==", quizId).get(),
+          QuizQuestionModel.find({ quizId }).lean(),
         ]);
-        const linkedIds = new Set(
-          linksSnap.docs.map((d) => d.data().questionId as string),
-        );
+
+        const linkedIds = new Set(linkedDocs.map((d) => d.questionId));
         const unlinked = allQs.filter((q) => !linkedIds.has(q.id));
+
         res.json({
           quizId,
           quizTitle: quiz.title,
@@ -1679,33 +1649,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
           unlinkedQuestionIds: unlinked.map((q) => q.id),
         });
       } catch (err: any) {
-        res
-          .status(500)
-          .json({ message: err.message || "Failed to get sync status" });
+        res.status(500).json({ message: err.message || "Failed to get sync status" });
       }
     },
   );
 
   const httpServer = createServer(app);
 
-  // Cleanup expired notifications periodically
+  // ========== CLEANUP EXPIRED NOTIFICATIONS ==========
   async function cleanupExpiredNotifications() {
     try {
-      const db = getFirestore();
-      const now = new Date();
-      const expiredSnap = await db
-        .collection("globalNotifications")
-        .where("expiresAt", "<=", now)
-        .get();
-      if (expiredSnap.empty) return;
-      const batch = db.batch();
-      expiredSnap.docs.forEach((doc) => batch.delete(doc.ref));
-      await batch.commit();
-      console.log(`🗑️ Deleted ${expiredSnap.size} expired notifications`);
+      const result = await GlobalNotificationModel.deleteMany({ expiresAt: { $lte: new Date() } });
+      if (result.deletedCount > 0)
+        console.log(`🗑️ Deleted ${result.deletedCount} expired notifications`);
     } catch (err) {
       console.error("Notification cleanup error:", err);
     }
   }
+
+  // Run cleanup every hour
+  setInterval(cleanupExpiredNotifications, 60 * 60 * 1000);
 
   return httpServer;
 }
