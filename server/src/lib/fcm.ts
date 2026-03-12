@@ -1,7 +1,6 @@
 // lib/fcm.ts
 // Firebase FCM (Push Notifications) - यह Firebase रहेगा
 
-
 import admin from "firebase-admin";
 import { storage } from "../storage.js";
 
@@ -11,7 +10,6 @@ export async function broadcastPush(
   data?: Record<string, string>,
 ): Promise<void> {
   try {
-    // ✅ MongoDB से सभी FCM tokens लाओ
     const tokens = await storage.getAllFcmTokens();
     if (!tokens || tokens.length === 0) return;
 
@@ -23,19 +21,26 @@ export async function broadcastPush(
       try {
         const response = await messaging.sendEachForMulticast({
           tokens: batch,
-          notification: { title, body },
-          data: data
-            ? Object.fromEntries(
-                Object.entries(data).map(([k, v]) => [k, String(v)]),
-              )
-            : undefined,
+          // ✅ notification block hataya — data-only message for background support
+          data: {
+            title,
+            body,
+            ...(data
+              ? Object.fromEntries(
+                  Object.entries(data).map(([k, v]) => [k, String(v)]),
+                )
+              : {}),
+          },
           android: {
             priority: "high",
-            notification: { sound: "default" },
+            // ✅ notification block hataya — Flutter khud show karega
           },
           apns: {
             payload: {
-              aps: { sound: "default" },
+              aps: {
+                sound: "default",
+                contentAvailable: true, // ✅ iOS background wake ke liye
+              },
             },
           },
         });
