@@ -21,6 +21,7 @@ export async function broadcastPush(
       try {
         const response = await messaging.sendEachForMulticast({
           tokens: batch,
+           notification: { title, body },
           // ✅ notification block hataya — data-only message for background support
           data: {
             title,

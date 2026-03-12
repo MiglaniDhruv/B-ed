@@ -8,9 +8,8 @@ import { seedDatabase } from "./seed.js";
 import cors from "cors";
 import * as fs from "fs";
 import * as path from "path";
-
-// ✅ NEW: MongoDB connection import (Firebase की जगह)
 import { connectDB } from "./config/db.js";
+import admin from "firebase-admin";
 
 const app = express();
 const log = console.log;
@@ -133,7 +132,7 @@ function setupErrorHandler(app: express.Application) {
   setupBodyParsing(app);
   setupRequestLogging(app);
 
-  // ✅ STEP 1: Connect MongoDB (Firebase initFirebase() की जगह)
+  // ✅ STEP 1: Connect MongoDB
   try {
     await connectDB();
     log("✅ MongoDB connected");
@@ -142,7 +141,20 @@ function setupErrorHandler(app: express.Application) {
     process.exit(1);
   }
 
-  // ✅ STEP 2: Seed database (optional, पहली बार के लिए)
+  // ✅ STEP 2: Firebase Admin init
+  try {
+    if (!admin.apps.length) {
+      const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT!);
+      admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount),
+      });
+      log("✅ Firebase Admin initialized");
+    }
+  } catch (err) {
+    console.error("❌ Firebase init failed:", err);
+  }
+
+  // ✅ STEP 3: Seed database
   try {
     await seedDatabase();
     log("✅ Database seeded");
@@ -155,7 +167,7 @@ function setupErrorHandler(app: express.Application) {
   setupErrorHandler(app);
 
   const port = parseInt(process.env.PORT || "5000", 10);
-  server.listen(port,"0.0.0.0", () => {
+  server.listen(port, "0.0.0.0", () => {
     console.log(`🚀 Backend running on http://localhost:${port}`);
   });
 })();
