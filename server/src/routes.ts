@@ -596,22 +596,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ========== FCM TOKEN ==========
-  app.post("/api/student/fcm-token", requireAuth, async (req, res) => {
-    try {
-      const { token } = req.body;
-      if (!token)
-        return res.status(400).json({ message: "FCM token required" });
-      await saveFcmToken(req.session.userId!, token);
-      const newSessionToken = crypto.randomBytes(32).toString("hex");
-      await storage.updateUserSessionToken(req.params.id, newSessionToken);
-      sessionCache.delete(req.params.id);
-      res.json({ success: true });
-    } catch (err) {
-      console.error("FCM token save error:", err);
-      res.status(500).json({ message: "Failed to save FCM token" });
-    }
-  });
-
+// ✅ SAHI
+app.post("/api/student/fcm-token", requireAuth, async (req, res) => {
+  try {
+    const { token } = req.body;
+    if (!token) return res.status(400).json({ message: "FCM token required" });
+    
+    await saveFcmToken(req.session.userId!, token);
+    // ❌ Woh do extra lines hata do — session invalidate mat karo
+    
+    res.json({ success: true });
+  } catch (err) {
+    console.error("FCM token save error:", err);
+    res.status(500).json({ message: "Failed to save FCM token" });
+  }
+});
   app.delete("/api/student/fcm-token", requireAuth, async (req, res) => {
     try {
       const { token } = req.body;

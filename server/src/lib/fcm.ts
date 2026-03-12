@@ -1,6 +1,6 @@
 // lib/fcm.ts
 // Firebase FCM (Push Notifications) - यह Firebase रहेगा
-// सिर्फ token storage MongoDB में होगा (storage.saveFcmToken)
+
 
 import admin from "firebase-admin";
 import { storage } from "../storage.js";
@@ -17,7 +17,6 @@ export async function broadcastPush(
 
     const messaging = admin.messaging();
 
-    // Batch में भेजो (FCM max 500 per batch)
     const batchSize = 500;
     for (let i = 0; i < tokens.length; i += batchSize) {
       const batch = tokens.slice(i, i + batchSize);
@@ -41,7 +40,6 @@ export async function broadcastPush(
           },
         });
 
-        // Invalid tokens हटाओ MongoDB से
         const invalidTokens: string[] = [];
         response.responses.forEach((resp, idx) => {
           if (
@@ -73,8 +71,6 @@ export async function broadcastPush(
   }
 }
 
-// ✅ यह functions अब routes.ts में directly storage call होते हैं
-// पर compatibility के लिए यहाँ भी रखे हैं
 export async function saveFcmToken(
   userId: string,
   token: string,

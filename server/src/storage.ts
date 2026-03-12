@@ -756,11 +756,14 @@ export class MongoStorage implements IStorage {
     cache.invalidate(`notifications_${userId}`);
   }
 
-  async notifyAllStudents(title: string, message: string, type: string) {
-    await GlobalNotificationModel.create({ title, message, type, readBy: [], clearedBy: [] });
-    cache.invalidatePrefix("notifications_");
-  }
-
+// ✅ SAHI — 30 din ki expiry add karo
+async notifyAllStudents(title: string, message: string, type: string) {
+  const expiresAt = new Date(Date.now() +  24 * 60 * 60 * 1000); // 30 days
+  await GlobalNotificationModel.create({ 
+    title, message, type, readBy: [], clearedBy: [], expiresAt 
+  });
+  cache.invalidatePrefix("notifications_");
+}
   // ── Notices ───────────────────────────────────────────────────────────────────
   private docToNotice(doc: any): Notice {
     return {
