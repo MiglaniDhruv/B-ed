@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import { UserModel } from "./model/model";
+import { UserModel } from "./model/model.js";
 
 export async function seedDatabase() {
   
