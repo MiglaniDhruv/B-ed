@@ -6,7 +6,11 @@ import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import multer from "multer";
 import { storage } from "./storage.js";
-import { QuizQuestionModel, GlobalNotificationModel } from "./model/model.js";
+import {
+  QuizQuestionModel,
+  QuizAttemptModel,
+  GlobalNotificationModel,
+} from "./model/model.js";
 import mongoose from "mongoose";
 import { sendPasswordResetEmail } from "./email.js";
 
@@ -1188,7 +1192,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.session.userId!;
       const { answers, timeTaken } = req.body;
 
-      // ✅ STEP 1: Pehle hi check karo — koi heavy kaam karne se pehle
+      // STEP 1: Pehle hi check karo
       const existing = await storage.getUserAttemptForQuiz(userId, quizId);
       if (existing) {
         return res.status(400).json({
@@ -1207,26 +1211,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (answers[q.id] === q.correctAnswer) score++;
       }
 
-      // ✅ STEP 2: Atomic insert — agar do requests ek saath aayen toh bhi sirf ek hi save ho
-      const { AttemptModel } = await import("./model/model.js");
-      const raw = await AttemptModel.findOneAndUpdate(
-        { userId, quizId }, // filter: same user + same quiz
+      // STEP 2: Atomic insert — race condition safe
+      const raw = (await QuizAttemptModel.findOneAndUpdate(
+        { userId, quizId },
         {
           $setOnInsert: {
-            // sirf naye insert pe set karo
             userId,
             quizId,
             score,
             totalQuestions: allQuestions.length,
             answers: answers ?? {},
             timeTaken: timeTaken ?? 0,
-            createdAt: new Date(),
+            submittedAt: new Date(),
           },
         },
         { upsert: true, new: false, rawResult: true },
-      );
+      )) as any;
 
-      // Agar match hua (duplicate) toh reject karo
+      // Agar duplicate tha toh reject karo
       if (!raw.lastErrorObject?.upserted) {
         const existingNow = await storage.getUserAttemptForQuiz(userId, quizId);
         return res.status(400).json({
@@ -1236,7 +1238,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const attempt = await AttemptModel.findById(
+      const attempt = await QuizAttemptModel.findById(
         raw.lastErrorObject.upserted,
       ).lean();
 
