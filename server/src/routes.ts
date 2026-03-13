@@ -6,11 +6,7 @@ import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import multer from "multer";
 import { storage } from "./storage.js";
-import {
-  QuizQuestionModel,
-  QuizAttemptModel,
-  GlobalNotificationModel,
-} from "./model/model.js";
+import { QuizQuestionModel, GlobalNotificationModel } from "./model/model.js";
 import mongoose from "mongoose";
 import { sendPasswordResetEmail } from "./email.js";
 
@@ -158,9 +154,7 @@ function requireAdminAuth(req: Request, res: Response, next: NextFunction) {
         sessionToken?: string;
       };
       if (decoded.studentId && !decoded.userId)
-        return res
-          .status(403)
-          .json({ message: "Students cannot access admin routes" });
+        return res.status(403).json({ message: "Students cannot access admin routes" });
       if (!decoded.userId)
         return res.status(401).json({ message: "Invalid token" });
       req.session.userId = decoded.userId;
@@ -180,8 +174,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.use(
     session({
-      secret:
-        process.env.SESSION_SECRET || crypto.randomBytes(32).toString("hex"),
+      secret: process.env.SESSION_SECRET || crypto.randomBytes(32).toString("hex"),
       resave: false,
       saveUninitialized: false,
       proxy: true,
@@ -230,8 +223,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
 
         const fileId = uploadStream.id.toString();
-        const baseUrl =
-          process.env.APP_BASE_URL || `${req.protocol}://${req.get("host")}`;
+        const baseUrl = process.env.APP_BASE_URL || `${req.protocol}://${req.get("host")}`;
         const url = `${baseUrl}/api/files/${fileId}`;
 
         res.json({ url });
@@ -291,27 +283,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put(
-    "/api/admin/users/:id/reset-password",
-    requireAdminAuth,
-    async (req, res) => {
-      try {
-        const { newPassword } = req.body;
-        if (!newPassword || newPassword.length < 6)
-          return res
-            .status(400)
-            .json({ message: "Password must be at least 6 characters" });
-        const hashedPassword = await bcrypt.hash(newPassword, 12);
-        const user = await storage.updateUser(req.params.id, {
-          password: hashedPassword,
-        } as any);
-        if (!user) return res.status(404).json({ message: "User not found" });
-        res.json({ success: true });
-      } catch {
-        res.status(500).json({ message: "Password reset failed" });
-      }
-    },
-  );
+  app.put("/api/admin/users/:id/reset-password", requireAdminAuth, async (req, res) => {
+    try {
+      const { newPassword } = req.body;
+      if (!newPassword || newPassword.length < 6)
+        return res.status(400).json({ message: "Password must be at least 6 characters" });
+      const hashedPassword = await bcrypt.hash(newPassword, 12);
+      const user = await storage.updateUser(req.params.id, { password: hashedPassword } as any);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      res.json({ success: true });
+    } catch {
+      res.status(500).json({ message: "Password reset failed" });
+    }
+  });
 
   app.delete("/api/admin/users/:id", requireAdminAuth, async (req, res) => {
     try {
@@ -337,9 +321,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       sessionCache.set(user.id, sessionToken);
       req.session.userId = user.id;
       req.session.sessionToken = sessionToken;
-      const token = jwt.sign({ userId: user.id, sessionToken }, JWT_SECRET, {
-        expiresIn: "30d",
-      });
+      const token = jwt.sign({ userId: user.id, sessionToken }, JWT_SECRET, { expiresIn: "30d" });
       const { password: _, ...safeUser } = user;
       res.json({ user: safeUser, token });
     } catch (err) {
@@ -355,24 +337,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!email) return res.status(400).json({ message: "Email is required" });
       const user = await storage.getUserByEmail(email);
       if (!user)
-        return res.json({
-          message: "If that email exists, a reset link has been sent.",
-          resetLink: null,
-        });
+        return res.json({ message: "If that email exists, a reset link has been sent.", resetLink: null });
       const token = crypto.randomBytes(32).toString("hex");
       const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
       await storage.createPasswordResetToken(user.id, token, expiresAt);
-      const protocol =
-        req.header("x-forwarded-proto") || req.protocol || "https";
+      const protocol = req.header("x-forwarded-proto") || req.protocol || "https";
       const host = req.header("x-forwarded-host") || req.get("host");
       const resetLink = `${protocol}://${host}/admin/reset-password?token=${token}`;
       const sent = await sendPasswordResetEmail(email, resetLink);
       if (!sent)
         return res.status(500).json({ message: "Failed to send reset email." });
-      res.json({
-        message: "If that email exists, a reset link has been sent.",
-        resetLink,
-      });
+      res.json({ message: "If that email exists, a reset link has been sent.", resetLink });
     } catch {
       res.status(500).json({ message: "Something went wrong" });
     }
@@ -382,28 +357,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { token, newPassword } = req.body;
       if (!token || !newPassword)
-        return res
-          .status(400)
-          .json({ message: "Token and new password are required" });
+        return res.status(400).json({ message: "Token and new password are required" });
       if (newPassword.length < 6)
-        return res
-          .status(400)
-          .json({ message: "Password must be at least 6 characters" });
+        return res.status(400).json({ message: "Password must be at least 6 characters" });
       const resetToken = await storage.getPasswordResetToken(token);
       if (!resetToken)
-        return res
-          .status(400)
-          .json({ message: "Invalid or expired reset link" });
+        return res.status(400).json({ message: "Invalid or expired reset link" });
       if (resetToken.used)
-        return res
-          .status(400)
-          .json({ message: "This reset link has already been used" });
+        return res.status(400).json({ message: "This reset link has already been used" });
       if (new Date() > resetToken.expiresAt)
         return res.status(400).json({ message: "This reset link has expired" });
       const hashedPassword = await bcrypt.hash(newPassword, 12);
-      await storage.updateUser(resetToken.userId, {
-        password: hashedPassword,
-      } as any);
+      await storage.updateUser(resetToken.userId, { password: hashedPassword } as any);
       await storage.markTokenUsed(token);
       await storage.updateUserSessionToken(resetToken.userId, "");
       sessionCache.delete(resetToken.userId);
@@ -464,19 +429,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
           const { password: _, ...safeStudent } = student;
           return res.json({
-            user: {
-              ...safeStudent,
-              username: safeStudent.name || safeStudent.email,
-              displayName: safeStudent.name,
-            },
+            user: { ...safeStudent, username: safeStudent.name || safeStudent.email, displayName: safeStudent.name },
           });
         }
         return res.status(401).json({ message: "User not found" });
       }
 
-      const dbUser =
-        (await storage.getUser(userId)) ||
-        (await storage.getStudentById(userId));
+      const dbUser = (await storage.getUser(userId)) || (await storage.getStudentById(userId));
       if (!dbUser) return res.status(401).json({ message: "User not found" });
 
       const dbToken = (dbUser as any).sessionToken;
@@ -501,11 +460,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const s = dbUser as any;
         const { password: _, ...safeStudent } = s;
         return res.json({
-          user: {
-            ...safeStudent,
-            username: safeStudent.name || safeStudent.email,
-            displayName: safeStudent.name,
-          },
+          user: { ...safeStudent, username: safeStudent.name || safeStudent.email, displayName: safeStudent.name },
         });
       }
     }
@@ -525,11 +480,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const { password: _, ...safeStudent } = student;
       return res.json({
-        user: {
-          ...safeStudent,
-          username: safeStudent.name || safeStudent.email,
-          displayName: safeStudent.name,
-        },
+        user: { ...safeStudent, username: safeStudent.name || safeStudent.email, displayName: safeStudent.name },
       });
     }
     return res.status(401).json({ message: "User not found" });
@@ -556,15 +507,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const cachedToken = sessionCache.get(userId);
       if (cachedToken) {
         if (cachedToken !== tokenSession)
-          return res
-            .status(401)
-            .json({ ok: false, code: "SESSION_INVALIDATED" });
+          return res.status(401).json({ ok: false, code: "SESSION_INVALIDATED" });
         return res.json({ ok: true });
       }
 
-      const user =
-        (await storage.getUser(userId)) ||
-        (await storage.getStudentById(userId));
+      const user = (await storage.getUser(userId)) || (await storage.getStudentById(userId));
       if (!user) return res.status(401).json({ ok: false, code: "NOT_FOUND" });
 
       const dbToken = (user as any).sessionToken;
@@ -598,8 +545,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/student/fcm-token", requireAuth, async (req, res) => {
     try {
       const { token } = req.body;
-      if (!token)
-        return res.status(400).json({ message: "FCM token required" });
+      if (!token) return res.status(400).json({ message: "FCM token required" });
       await saveFcmToken(req.session.userId!, token);
       res.json({ success: true });
     } catch (err) {
@@ -623,32 +569,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { identifier, password } = req.body;
       if (!identifier || !password)
-        return res
-          .status(400)
-          .json({ message: "Email/phone and password are required" });
+        return res.status(400).json({ message: "Email/phone and password are required" });
       let student = await storage.getStudentByEmail(identifier);
       if (!student) student = await storage.getStudentByPhone(identifier);
-      if (!student)
-        return res.status(401).json({ message: "Invalid credentials" });
+      if (!student) return res.status(401).json({ message: "Invalid credentials" });
       if (student.status === "blocked")
-        return res.status(403).json({
-          message: "Your account has been blocked. Contact your teacher.",
-        });
+        return res.status(403).json({ message: "Your account has been blocked. Contact your teacher." });
       if (student.status === "pending")
-        return res.status(403).json({
-          message: "Your account is pending approval. Contact your teacher.",
-        });
+        return res.status(403).json({ message: "Your account is pending approval. Contact your teacher." });
       const valid = await bcrypt.compare(password, student.password);
-      if (!valid)
-        return res.status(401).json({ message: "Invalid credentials" });
+      if (!valid) return res.status(401).json({ message: "Invalid credentials" });
       const sessionToken = crypto.randomBytes(32).toString("hex");
       await storage.updateStudentSessionToken(student.id, sessionToken);
       sessionCache.set(student.id, sessionToken);
-      const token = jwt.sign(
-        { studentId: student.id, sessionToken },
-        JWT_SECRET,
-        { expiresIn: "30d" },
-      );
+      const token = jwt.sign({ studentId: student.id, sessionToken }, JWT_SECRET, { expiresIn: "30d" });
       const { password: _, ...safeStudent } = student;
       res.json({ student: safeStudent, token });
     } catch {
@@ -665,34 +599,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get(
-    "/api/admin/students/with-passwords",
-    requireAdminAuth,
-    async (_req, res) => {
-      try {
-        res.json(await storage.getStudentsWithPasswords());
-      } catch (err) {
-        console.error("with-passwords error:", err);
-        res.status(500).json({ message: "Failed to fetch students" });
-      }
-    },
-  );
+  app.get("/api/admin/students/with-passwords", requireAdminAuth, async (_req, res) => {
+    try {
+      res.json(await storage.getStudentsWithPasswords());
+    } catch (err) {
+      console.error("with-passwords error:", err);
+      res.status(500).json({ message: "Failed to fetch students" });
+    }
+  });
 
   app.post("/api/admin/students/bulk", requireAdminAuth, async (req, res) => {
     try {
       const { students } = req.body as {
-        students: {
-          name: string;
-          email?: string;
-          phone: string;
-          password: string;
-        }[];
+        students: { name: string; email?: string; phone: string; password: string }[];
       };
       if (!Array.isArray(students) || students.length === 0)
         return res.status(400).json({ message: "No students provided" });
 
-      let created = 0,
-        skipped = 0;
+      let created = 0, skipped = 0;
       const skipReasons: string[] = [];
 
       for (const s of students) {
@@ -700,39 +624,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const phoneVal = s.phone?.trim() || "";
           if (phoneVal !== "") {
             const existingPhone = await storage.getStudentByPhone(phoneVal);
-            if (existingPhone) {
-              skipReasons.push(`${s.name}: phone ${phoneVal} already exists`);
-              skipped++;
-              continue;
-            }
+            if (existingPhone) { skipReasons.push(`${s.name}: phone ${phoneVal} already exists`); skipped++; continue; }
           }
           const emailVal = s.email?.trim() || "";
           if (emailVal !== "") {
             const existingEmail = await storage.getStudentByEmail(emailVal);
-            if (existingEmail) {
-              skipReasons.push(`${s.name}: email already exists`);
-              skipped++;
-              continue;
-            }
+            if (existingEmail) { skipReasons.push(`${s.name}: email already exists`); skipped++; continue; }
           }
-          if (phoneVal === "" && emailVal === "") {
-            skipReasons.push(`${s.name}: phone or email required`);
-            skipped++;
-            continue;
-          }
+          if (phoneVal === "" && emailVal === "") { skipReasons.push(`${s.name}: phone or email required`); skipped++; continue; }
 
           const hashedPassword = await bcrypt.hash(s.password, 12);
-          await storage.createStudent(
-            {
-              name: s.name?.trim() || "Student",
-              email: emailVal,
-              phone: phoneVal,
-              password: hashedPassword,
-              enrollmentNumber: `ENR${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
-              status: "approved",
-            },
-            s.password,
-          );
+          await storage.createStudent({
+            name: s.name?.trim() || "Student",
+            email: emailVal,
+            phone: phoneVal,
+            password: hashedPassword,
+            enrollmentNumber: `ENR${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
+            status: "approved",
+          }, s.password);
           created++;
         } catch (err: any) {
           skipReasons.push(`${s.name}: ${err?.message || "unknown error"}`);
@@ -752,42 +661,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let { name, email, phone, password } = req.body;
       email = email?.trim() || null;
       phone = phone?.trim() || null;
-      if (!name || !password)
-        return res.status(400).json({ message: "Name and password required" });
-      if (!email && !phone)
-        return res
-          .status(400)
-          .json({ message: "Either email or phone number is required" });
-      if (password.length < 6)
-        return res
-          .status(400)
-          .json({ message: "Password must be at least 6 characters" });
+      if (!name || !password) return res.status(400).json({ message: "Name and password required" });
+      if (!email && !phone) return res.status(400).json({ message: "Either email or phone number is required" });
+      if (password.length < 6) return res.status(400).json({ message: "Password must be at least 6 characters" });
       if (email) {
         const existing = await storage.getStudentByEmail(email);
-        if (existing)
-          return res
-            .status(400)
-            .json({ message: "A student with this email already exists" });
+        if (existing) return res.status(400).json({ message: "A student with this email already exists" });
       }
       if (phone) {
         const existingPhone = await storage.getStudentByPhone(phone);
-        if (existingPhone)
-          return res
-            .status(400)
-            .json({ message: "A student with this phone already exists" });
+        if (existingPhone) return res.status(400).json({ message: "A student with this phone already exists" });
       }
       const hashedPassword = await bcrypt.hash(password, 12);
-      const student = await storage.createStudent(
-        {
-          name,
-          email: email ?? "",
-          phone: phone ?? "",
-          password: hashedPassword,
-          enrollmentNumber: `ENR${Date.now()}`,
-          status: "approved",
-        },
-        password,
-      );
+      const student = await storage.createStudent({
+        name, email: email ?? "", phone: phone ?? "",
+        password: hashedPassword, enrollmentNumber: `ENR${Date.now()}`, status: "approved",
+      }, password);
       res.json(student);
     } catch (err) {
       console.error("Create student error FULL:", err);
@@ -795,80 +684,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put(
-    "/api/admin/students/:id/reset-password",
-    requireAdminAuth,
-    async (req, res) => {
-      try {
-        const { newPassword } = req.body;
-        if (!newPassword || newPassword.length < 6)
-          return res
-            .status(400)
-            .json({ message: "Password must be at least 6 characters" });
-        const student = await storage.getStudentById(req.params.id);
-        if (!student)
-          return res.status(404).json({ message: "Student not found" });
-        const hashedPassword = await bcrypt.hash(newPassword, 12);
-        await storage.updateStudentPassword(
-          req.params.id,
-          hashedPassword,
-          newPassword,
-        );
-        await storage.updateStudentSessionToken(req.params.id, null as any);
-        sessionCache.delete(req.params.id);
-        res.json({ success: true });
-      } catch (err) {
-        console.error("Reset password error:", err);
-        res.status(500).json({ message: "Password reset failed" });
-      }
-    },
-  );
+  app.put("/api/admin/students/:id/reset-password", requireAdminAuth, async (req, res) => {
+    try {
+      const { newPassword } = req.body;
+      if (!newPassword || newPassword.length < 6)
+        return res.status(400).json({ message: "Password must be at least 6 characters" });
+      const student = await storage.getStudentById(req.params.id);
+      if (!student) return res.status(404).json({ message: "Student not found" });
+      const hashedPassword = await bcrypt.hash(newPassword, 12);
+      await storage.updateStudentPassword(req.params.id, hashedPassword, newPassword);
+      await storage.updateStudentSessionToken(req.params.id, null as any);
+      sessionCache.delete(req.params.id);
+      res.json({ success: true });
+    } catch (err) {
+      console.error("Reset password error:", err);
+      res.status(500).json({ message: "Password reset failed" });
+    }
+  });
 
   app.put("/api/admin/students/:id", requireAdminAuth, async (req, res) => {
     try {
       const { name, email, phone } = req.body;
       if (!name) return res.status(400).json({ message: "Name is required" });
-      if (!email && !phone)
-        return res
-          .status(400)
-          .json({ message: "Either email or phone required" });
-      const student = await storage.updateStudent(req.params.id, {
-        name,
-        email: email || "",
-        phone: phone || "",
-      });
+      if (!email && !phone) return res.status(400).json({ message: "Either email or phone required" });
+      const student = await storage.updateStudent(req.params.id, { name, email: email || "", phone: phone || "" });
       res.json(student);
     } catch (err: any) {
-      res
-        .status(500)
-        .json({ message: err.message || "Failed to update student" });
+      res.status(500).json({ message: err.message || "Failed to update student" });
     }
   });
 
-  app.put(
-    "/api/admin/students/:id/status",
-    requireAdminAuth,
-    async (req, res) => {
-      try {
-        const { status } = req.body;
-        if (!["pending", "approved", "blocked"].includes(status))
-          return res.status(400).json({ message: "Invalid status" });
-        await storage.updateStudentStatus(req.params.id, status);
-        if (status === "blocked") {
-          sessionCache.delete(req.params.id);
-          try {
-            await storage.updateStudentSessionToken(req.params.id, "");
-          } catch (e) {
-            console.error("Could not clear session on block:", e);
-          }
-        }
-        if (status === "approved") sessionCache.delete(req.params.id);
-        res.json({ success: true });
-      } catch {
-        res.status(500).json({ message: "Failed to update student status" });
+  app.put("/api/admin/students/:id/status", requireAdminAuth, async (req, res) => {
+    try {
+      const { status } = req.body;
+      if (!["pending", "approved", "blocked"].includes(status))
+        return res.status(400).json({ message: "Invalid status" });
+      await storage.updateStudentStatus(req.params.id, status);
+      if (status === "blocked") {
+        sessionCache.delete(req.params.id);
+        try { await storage.updateStudentSessionToken(req.params.id, ""); } catch (e) { console.error("Could not clear session on block:", e); }
       }
-    },
-  );
+      if (status === "approved") sessionCache.delete(req.params.id);
+      res.json({ success: true });
+    } catch {
+      res.status(500).json({ message: "Failed to update student status" });
+    }
+  });
 
   app.delete("/api/admin/students/:id", requireAdminAuth, async (req, res) => {
     try {
@@ -891,12 +752,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         { id: 2, title: "Semester 2", name: "Semester 2", number: 2 },
         { id: 3, title: "Semester 3", name: "Semester 3", number: 3 },
         { id: 4, title: "Semester 4", name: "Semester 4", number: 4 },
-        {
-          id: 5,
-          title: "Exam Preparation",
-          name: "Exam Preparation",
-          number: 5,
-        },
+        { id: 5, title: "Exam Preparation", name: "Exam Preparation", number: 5 },
       ];
       const semestersWithCounts = await Promise.all(
         semesters.map(async (sem) => {
@@ -912,57 +768,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get(
-    "/api/semesters/:semesterNumber/subjects",
-    requireAuth,
-    async (req, res) => {
-      try {
-        const semesterNumber = parseInt(req.params.semesterNumber);
-        if (isNaN(semesterNumber) || semesterNumber < 1 || semesterNumber > 5)
-          return res
-            .status(400)
-            .json({ message: "Invalid semester number. Must be 1-5." });
-        res.json(await storage.getSubjectsBySemester(semesterNumber));
-      } catch (err) {
-        console.error("Get subjects by semester error:", err);
-        res.status(500).json({ message: "Failed to fetch subjects" });
-      }
-    },
-  );
+  app.get("/api/semesters/:semesterNumber/subjects", requireAuth, async (req, res) => {
+    try {
+      const semesterNumber = parseInt(req.params.semesterNumber);
+      if (isNaN(semesterNumber) || semesterNumber < 1 || semesterNumber > 5)
+        return res.status(400).json({ message: "Invalid semester number. Must be 1-5." });
+      res.json(await storage.getSubjectsBySemester(semesterNumber));
+    } catch (err) {
+      console.error("Get subjects by semester error:", err);
+      res.status(500).json({ message: "Failed to fetch subjects" });
+    }
+  });
 
   // ========== SUBJECTS ==========
   app.get("/api/subjects", requireAuth, async (_req, res) => {
-    try {
-      res.json(await storage.getSubjects());
-    } catch {
-      res.status(500).json({ message: "Failed to fetch subjects" });
-    }
+    try { res.json(await storage.getSubjects()); }
+    catch { res.status(500).json({ message: "Failed to fetch subjects" }); }
   });
 
   app.get("/api/subjects/:id", requireAuth, async (req, res) => {
     try {
       const subject = await storage.getSubjectById(req.params.id);
-      if (!subject)
-        return res.status(404).json({ message: "Subject not found" });
+      if (!subject) return res.status(404).json({ message: "Subject not found" });
       res.json(subject);
-    } catch {
-      res.status(500).json({ message: "Failed to fetch subject" });
-    }
+    } catch { res.status(500).json({ message: "Failed to fetch subject" }); }
   });
 
   app.post("/api/admin/subjects", requireAdminAuth, async (req, res) => {
     try {
       const data = insertSubjectSchema.parse(req.body);
       if (data.semesterNumber < 1 || data.semesterNumber > 5)
-        return res
-          .status(400)
-          .json({ message: "Semester number must be between 1 and 5" });
+        return res.status(400).json({ message: "Semester number must be between 1 and 5" });
       const result = await storage.createSubject(data);
       routeCache.invalidate("route_semesters");
       res.json(result);
     } catch (err) {
-      if (err instanceof z.ZodError)
-        return res.status(400).json({ message: err.errors[0].message });
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
       res.status(500).json({ message: "Failed to create subject" });
     }
   });
@@ -970,21 +811,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/admin/subjects/:id", requireAdminAuth, async (req, res) => {
     try {
       const data = insertSubjectSchema.partial().parse(req.body);
-      if (
-        data.semesterNumber !== undefined &&
-        (data.semesterNumber < 1 || data.semesterNumber > 5)
-      )
-        return res
-          .status(400)
-          .json({ message: "Semester number must be between 1 and 5" });
+      if (data.semesterNumber !== undefined && (data.semesterNumber < 1 || data.semesterNumber > 5))
+        return res.status(400).json({ message: "Semester number must be between 1 and 5" });
       const subject = await storage.updateSubject(req.params.id, data);
-      if (!subject)
-        return res.status(404).json({ message: "Subject not found" });
+      if (!subject) return res.status(404).json({ message: "Subject not found" });
       routeCache.invalidate("route_semesters");
       res.json(subject);
     } catch (err) {
-      if (err instanceof z.ZodError)
-        return res.status(400).json({ message: err.errors[0].message });
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
       res.status(500).json({ message: "Failed to update subject" });
     }
   });
@@ -994,25 +828,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.deleteSubject(req.params.id);
       routeCache.invalidate("route_semesters");
       res.json({ success: true });
-    } catch {
-      res.status(500).json({ message: "Failed to delete subject" });
-    }
+    } catch { res.status(500).json({ message: "Failed to delete subject" }); }
   });
 
   app.get("/api/subjects/:id/units", requireAuth, async (req, res) => {
-    try {
-      res.json(await storage.getUnitsBySubject(req.params.id));
-    } catch {
-      res.status(500).json({ message: "Failed to fetch chapters" });
-    }
+    try { res.json(await storage.getUnitsBySubject(req.params.id)); }
+    catch { res.status(500).json({ message: "Failed to fetch chapters" }); }
   });
 
   app.get("/api/categories/:id/units", requireAuth, async (req, res) => {
-    try {
-      res.json(await storage.getUnitsBySubject(req.params.id));
-    } catch {
-      res.status(500).json({ message: "Failed to fetch chapters" });
-    }
+    try { res.json(await storage.getUnitsBySubject(req.params.id)); }
+    catch { res.status(500).json({ message: "Failed to fetch chapters" }); }
   });
 
   // ========== UNITS ==========
@@ -1022,23 +848,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       routeCache.invalidate("route_semesters");
       res.json(result);
     } catch (err) {
-      if (err instanceof z.ZodError)
-        return res.status(400).json({ message: err.errors[0].message });
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
       res.status(500).json({ message: "Failed to create chapter" });
     }
   });
 
   app.put("/api/admin/units/:id", requireAdminAuth, async (req, res) => {
     try {
-      const unit = await storage.updateUnit(
-        req.params.id,
-        insertUnitSchema.partial().parse(req.body),
-      );
+      const unit = await storage.updateUnit(req.params.id, insertUnitSchema.partial().parse(req.body));
       if (!unit) return res.status(404).json({ message: "Chapter not found" });
       res.json(unit);
     } catch (err) {
-      if (err instanceof z.ZodError)
-        return res.status(400).json({ message: err.errors[0].message });
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
       res.status(500).json({ message: "Failed to update chapter" });
     }
   });
@@ -1048,29 +869,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.deleteUnit(req.params.id);
       routeCache.invalidate("route_semesters");
       res.json({ success: true });
-    } catch {
-      res.status(500).json({ message: "Failed to delete chapter" });
-    }
+    } catch { res.status(500).json({ message: "Failed to delete chapter" }); }
   });
 
   // ========== STUDY MATERIALS ==========
   app.get("/api/study-materials", requireAuth, async (req, res) => {
     try {
       const unitId = req.query.unitId as string | undefined;
-      if (unitId)
-        return res.json(await storage.getStudyMaterialsByUnit(unitId));
+      if (unitId) return res.json(await storage.getStudyMaterialsByUnit(unitId));
       res.json([]);
-    } catch {
-      res.status(500).json({ message: "Failed to fetch study materials" });
-    }
+    } catch { res.status(500).json({ message: "Failed to fetch study materials" }); }
   });
 
   app.get("/api/units/:id/materials", requireAuth, async (req, res) => {
-    try {
-      res.json(await storage.getStudyMaterialsByUnit(req.params.id));
-    } catch {
-      res.status(500).json({ message: "Failed to fetch materials" });
-    }
+    try { res.json(await storage.getStudyMaterialsByUnit(req.params.id)); }
+    catch { res.status(500).json({ message: "Failed to fetch materials" }); }
   });
 
   app.post("/api/admin/study-materials", requireAdminAuth, async (req, res) => {
@@ -1079,59 +892,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const mat = await storage.createStudyMaterial(data);
       routeCache.invalidate("route_semesters");
       Promise.all([
-        storage.notifyAllStudents(
-          "📚 New Study Material",
-          `"${mat.title}" has been added. Check it out!`,
-          "material",
-        ),
-        broadcastPush(
-          "📚 New Study Material",
-          `"${mat.title}" has been added. Check it out!`,
-          { type: "material", materialId: mat.id },
-        ),
+        storage.notifyAllStudents("📚 New Study Material", `"${mat.title}" has been added. Check it out!`, "material"),
+        broadcastPush("📚 New Study Material", `"${mat.title}" has been added. Check it out!`, { type: "material", materialId: mat.id }),
       ]).catch((err) => console.error("Notification error (material):", err));
       res.json(mat);
     } catch (err) {
-      if (err instanceof z.ZodError)
-        return res.status(400).json({ message: err.errors[0].message });
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
       console.error("Create material error:", err);
       res.status(500).json({ message: "Failed to create study material" });
     }
   });
 
-  app.put(
-    "/api/admin/study-materials/:id",
-    requireAdminAuth,
-    async (req, res) => {
-      try {
-        const mat = await storage.updateStudyMaterial(
-          req.params.id,
-          insertStudyMaterialSchema.partial().parse(req.body),
-        );
-        if (!mat)
-          return res.status(404).json({ message: "Study material not found" });
-        res.json(mat);
-      } catch (err) {
-        if (err instanceof z.ZodError)
-          return res.status(400).json({ message: err.errors[0].message });
-        res.status(500).json({ message: "Failed to update study material" });
-      }
-    },
-  );
+  app.put("/api/admin/study-materials/:id", requireAdminAuth, async (req, res) => {
+    try {
+      const mat = await storage.updateStudyMaterial(req.params.id, insertStudyMaterialSchema.partial().parse(req.body));
+      if (!mat) return res.status(404).json({ message: "Study material not found" });
+      res.json(mat);
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
+      res.status(500).json({ message: "Failed to update study material" });
+    }
+  });
 
-  app.delete(
-    "/api/admin/study-materials/:id",
-    requireAdminAuth,
-    async (req, res) => {
-      try {
-        await storage.deleteStudyMaterial(req.params.id);
-        routeCache.invalidate("route_semesters");
-        res.json({ success: true });
-      } catch {
-        res.status(500).json({ message: "Failed to delete study material" });
-      }
-    },
-  );
+  app.delete("/api/admin/study-materials/:id", requireAdminAuth, async (req, res) => {
+    try {
+      await storage.deleteStudyMaterial(req.params.id);
+      routeCache.invalidate("route_semesters");
+      res.json({ success: true });
+    } catch { res.status(500).json({ message: "Failed to delete study material" }); }
+  });
 
   // ========== QUIZZES ==========
   app.get("/api/quizzes", requireAuth, async (req, res) => {
@@ -1141,19 +930,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let isStudent = false;
       if (authHeader?.startsWith("Bearer ")) {
         try {
-          const decoded = jwt.verify(authHeader.slice(7), JWT_SECRET) as {
-            userId?: string;
-            studentId?: string;
-          };
+          const decoded = jwt.verify(authHeader.slice(7), JWT_SECRET) as { userId?: string; studentId?: string };
           isStudent = !!decoded.studentId && !decoded.userId;
         } catch {}
       }
-      res.json(
-        isStudent ? quizList.filter((q) => q.isActive === true) : quizList,
-      );
-    } catch {
-      res.status(500).json({ message: "Failed to fetch quizzes" });
-    }
+      res.json(isStudent ? quizList.filter((q) => q.isActive === true) : quizList);
+    } catch { res.status(500).json({ message: "Failed to fetch quizzes" }); }
   });
 
   app.get("/api/quizzes/:id", requireAuth, async (req, res) => {
@@ -1161,46 +943,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const quiz = await storage.getQuizById(req.params.id);
       if (!quiz) return res.status(404).json({ message: "Quiz not found" });
       res.json(quiz);
-    } catch {
-      res.status(500).json({ message: "Failed to fetch quiz" });
-    }
+    } catch { res.status(500).json({ message: "Failed to fetch quiz" }); }
   });
 
   app.get("/api/quizzes/:id/questions", requireAuth, async (req, res) => {
     try {
       const qs = await storage.getQuestionsByQuiz(req.params.id);
       res.json(qs.map(({ correctAnswer, ...q }) => q));
-    } catch {
-      res.status(500).json({ message: "Failed to fetch questions" });
-    }
+    } catch { res.status(500).json({ message: "Failed to fetch questions" }); }
   });
 
   app.get("/api/quizzes/:id/check-attempt", requireAuth, async (req, res) => {
     try {
-      const existing = await storage.getUserAttemptForQuiz(
-        req.session.userId!,
-        req.params.id,
-      );
+      const existing = await storage.getUserAttemptForQuiz(req.session.userId!, req.params.id);
       res.json({ attempted: !!existing, attempt: existing || null });
-    } catch {
-      res.status(500).json({ message: "Failed to check attempt" });
-    }
+    } catch { res.status(500).json({ message: "Failed to check attempt" }); }
   });
+
   app.post("/api/quizzes/:id/submit", requireAuth, async (req, res) => {
     try {
       const quizId = req.params.id;
       const userId = req.session.userId!;
       const { answers, timeTaken } = req.body;
-
-      // STEP 1: Pehle hi check karo
-      const existing = await storage.getUserAttemptForQuiz(userId, quizId);
-      if (existing) {
-        return res.status(400).json({
-          message: "You have already attempted this quiz.",
-          code: "ALREADY_ATTEMPTED",
-          attempt: existing,
-        });
-      }
 
       const allQuestions = await storage.getQuestionsByQuiz(quizId);
       if (allQuestions.length === 0)
@@ -1211,57 +975,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (answers[q.id] === q.correctAnswer) score++;
       }
 
-      // STEP 2: Atomic insert — race condition safe
-      const raw = (await QuizAttemptModel.findOneAndUpdate(
-        { userId, quizId },
-        {
-          $setOnInsert: {
-            userId,
-            quizId,
-            score,
-            totalQuestions: allQuestions.length,
-            answers: answers ?? {},
-            timeTaken: timeTaken ?? 0,
-            submittedAt: new Date(),
-          },
-        },
-        { upsert: true, new: false, rawResult: true },
-      )) as any;
-
-      // Agar duplicate tha toh reject karo
-      if (!raw.lastErrorObject?.upserted) {
-        const existingNow = await storage.getUserAttemptForQuiz(userId, quizId);
+      const existing = await storage.getUserAttemptForQuiz(userId, quizId);
+      if (existing) {
         return res.status(400).json({
           message: "You have already attempted this quiz.",
           code: "ALREADY_ATTEMPTED",
-          attempt: existingNow,
+          attempt: existing,
         });
       }
 
-      const attempt = await QuizAttemptModel.findById(
-        raw.lastErrorObject.upserted,
-      ).lean();
+      const attempt = await storage.createAttempt({ userId, quizId, score, totalQuestions: allQuestions.length, answers, timeTaken });
 
       res.json({
         attempt,
         questions: allQuestions.map(({ correctAnswer, ...q }) => q),
-        correctAnswers: Object.fromEntries(
-          allQuestions.map((q) => [q.id, q.correctAnswer]),
-        ),
+        correctAnswers: Object.fromEntries(allQuestions.map((q) => [q.id, q.correctAnswer])),
       });
     } catch (err) {
       console.error("Submit quiz error:", err);
       res.status(500).json({ message: "Submit failed" });
     }
   });
+
   app.post("/api/admin/quizzes", requireAdminAuth, async (req, res) => {
     try {
       const data = insertQuizSchema.parse(req.body);
       const quiz = await storage.createQuiz({ ...data, isActive: false });
       res.json(quiz);
     } catch (err) {
-      if (err instanceof z.ZodError)
-        return res.status(400).json({ message: err.errors[0].message });
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
       res.status(500).json({ message: "Failed to create quiz" });
     }
   });
@@ -1274,24 +1016,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!quiz) return res.status(404).json({ message: "Quiz not found" });
       if (!oldQuiz?.isActive && quiz.isActive) {
         Promise.all([
-          storage.notifyAllStudents(
-            "📝 New Quiz Available",
-            `"${quiz.title}" is now available. Attempt it now!`,
-            "quiz",
-          ),
-          broadcastPush(
-            "📝 New Quiz Available",
-            `"${quiz.title}" is now available!`,
-            { type: "quiz", quizId: quiz.id },
-          ),
-        ]).catch((err) =>
-          console.error("Notification error (quiz publish):", err),
-        );
+          storage.notifyAllStudents("📝 New Quiz Available", `"${quiz.title}" is now available. Attempt it now!`, "quiz"),
+          broadcastPush("📝 New Quiz Available", `"${quiz.title}" is now available!`, { type: "quiz", quizId: quiz.id }),
+        ]).catch((err) => console.error("Notification error (quiz publish):", err));
       }
       res.json(quiz);
     } catch (err) {
-      if (err instanceof z.ZodError)
-        return res.status(400).json({ message: err.errors[0].message });
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
       res.status(500).json({ message: "Failed to update quiz" });
     }
   });
@@ -1300,9 +1031,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       await storage.deleteQuiz(req.params.id);
       res.json({ success: true });
-    } catch {
-      res.status(500).json({ message: "Failed to delete quiz" });
-    }
+    } catch { res.status(500).json({ message: "Failed to delete quiz" }); }
   });
 
   // ========== QUESTIONS ==========
@@ -1310,38 +1039,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const quizId = req.query.quizId as string | undefined;
       const withQuizInfo = req.query.withQuizInfo === "true";
-      if (withQuizInfo)
-        return res.json(await storage.getAllQuestionsWithQuizInfo(quizId));
+      if (withQuizInfo) return res.json(await storage.getAllQuestionsWithQuizInfo(quizId));
       if (quizId) return res.json(await storage.getQuestionsByQuiz(quizId));
       res.json(await storage.getAllQuestions());
-    } catch {
-      res.status(500).json({ message: "Failed to fetch questions" });
-    }
+    } catch { res.status(500).json({ message: "Failed to fetch questions" }); }
   });
 
   app.post("/api/admin/questions", requireAdminAuth, async (req, res) => {
     try {
-      res.json(
-        await storage.createQuestion(insertQuestionSchema.parse(req.body)),
-      );
+      res.json(await storage.createQuestion(insertQuestionSchema.parse(req.body)));
     } catch (err) {
-      if (err instanceof z.ZodError)
-        return res.status(400).json({ message: err.errors[0].message });
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
       res.status(500).json({ message: "Failed to create question" });
     }
   });
 
   app.put("/api/admin/questions/:id", requireAdminAuth, async (req, res) => {
     try {
-      const q = await storage.updateQuestion(
-        req.params.id,
-        insertQuestionSchema.partial().parse(req.body),
-      );
+      const q = await storage.updateQuestion(req.params.id, insertQuestionSchema.partial().parse(req.body));
       if (!q) return res.status(404).json({ message: "Question not found" });
       res.json(q);
     } catch (err) {
-      if (err instanceof z.ZodError)
-        return res.status(400).json({ message: err.errors[0].message });
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
       res.status(500).json({ message: "Failed to update question" });
     }
   });
@@ -1350,87 +1069,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       await storage.deleteQuestion(req.params.id);
       res.json({ success: true });
-    } catch {
-      res.status(500).json({ message: "Failed to delete question" });
-    }
+    } catch { res.status(500).json({ message: "Failed to delete question" }); }
   });
 
   // ========== QUIZ ↔ QUESTION JOIN ==========
-  app.post(
-    "/api/admin/quizzes/:quizId/questions",
-    requireAdminAuth,
-    async (req, res) => {
-      try {
-        await storage.addQuestionToQuiz(
-          req.params.quizId,
-          req.body.questionId,
-          req.body.order,
-        );
-        res.json({ success: true });
-      } catch {
-        res.status(500).json({ message: "Failed to add question to quiz" });
-      }
-    },
-  );
+  app.post("/api/admin/quizzes/:quizId/questions", requireAdminAuth, async (req, res) => {
+    try {
+      await storage.addQuestionToQuiz(req.params.quizId, req.body.questionId, req.body.order);
+      res.json({ success: true });
+    } catch { res.status(500).json({ message: "Failed to add question to quiz" }); }
+  });
 
-  app.delete(
-    "/api/admin/quizzes/:quizId/questions/:questionId",
-    requireAdminAuth,
-    async (req, res) => {
-      try {
-        await storage.removeQuestionFromQuiz(
-          req.params.quizId,
-          req.params.questionId,
-        );
-        res.json({ success: true });
-      } catch {
-        res
-          .status(500)
-          .json({ message: "Failed to remove question from quiz" });
-      }
-    },
-  );
+  app.delete("/api/admin/quizzes/:quizId/questions/:questionId", requireAdminAuth, async (req, res) => {
+    try {
+      await storage.removeQuestionFromQuiz(req.params.quizId, req.params.questionId);
+      res.json({ success: true });
+    } catch { res.status(500).json({ message: "Failed to remove question from quiz" }); }
+  });
 
-  app.put(
-    "/api/admin/quizzes/:quizId/questions/reorder",
-    requireAdminAuth,
-    async (req, res) => {
-      try {
-        await storage.reorderQuestionsInQuiz(
-          req.params.quizId,
-          req.body.orderedQuestionIds,
-        );
-        res.json({ success: true });
-      } catch {
-        res.status(500).json({ message: "Failed to reorder questions" });
-      }
-    },
-  );
+  app.put("/api/admin/quizzes/:quizId/questions/reorder", requireAdminAuth, async (req, res) => {
+    try {
+      await storage.reorderQuestionsInQuiz(req.params.quizId, req.body.orderedQuestionIds);
+      res.json({ success: true });
+    } catch { res.status(500).json({ message: "Failed to reorder questions" }); }
+  });
 
   // ========== QUIZ ANALYTICS ==========
-  app.get(
-    "/api/admin/quizzes/:id/analytics",
-    requireAdminAuth,
-    async (req, res) => {
-      try {
-        const analytics = await storage.getQuizAnalytics(req.params.id);
-        res.json(analytics);
-      } catch (err: any) {
-        if (err.message === "Quiz not found")
-          return res.status(404).json({ message: "Quiz not found" });
-        console.error("Analytics error:", err);
-        res.status(500).json({ message: "Failed to fetch analytics" });
-      }
-    },
-  );
+  app.get("/api/admin/quizzes/:id/analytics", requireAdminAuth, async (req, res) => {
+    try {
+      const analytics = await storage.getQuizAnalytics(req.params.id);
+      res.json(analytics);
+    } catch (err: any) {
+      if (err.message === "Quiz not found") return res.status(404).json({ message: "Quiz not found" });
+      console.error("Analytics error:", err);
+      res.status(500).json({ message: "Failed to fetch analytics" });
+    }
+  });
 
   // ========== NOTICE BOARD ==========
   app.get("/api/admin/notices", requireAdminAuth, async (_req, res) => {
-    try {
-      res.json(await storage.getNotices());
-    } catch {
-      res.status(500).json({ message: "Failed to fetch notices" });
-    }
+    try { res.json(await storage.getNotices()); }
+    catch { res.status(500).json({ message: "Failed to fetch notices" }); }
   });
 
   app.post("/api/admin/notices", requireAdminAuth, async (req, res) => {
@@ -1439,20 +1118,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const data = { ...raw, expiresAt: new Date(raw.expiresAt) };
       const notice = await storage.createNotice(data);
       Promise.all([
-        storage.notifyAllStudents(
-          `📢 Notice: ${notice.title}`,
-          notice.message,
-          "notice",
-        ),
-        broadcastPush(`📢 Notice: ${notice.title}`, notice.message, {
-          type: "notice",
-          noticeId: notice.id,
-        }),
+        storage.notifyAllStudents(`📢 Notice: ${notice.title}`, notice.message, "notice"),
+        broadcastPush(`📢 Notice: ${notice.title}`, notice.message, { type: "notice", noticeId: notice.id }),
       ]).catch((err) => console.error("Notification error (notice):", err));
       res.json(notice);
     } catch (err) {
-      if (err instanceof z.ZodError)
-        return res.status(400).json({ message: err.errors[0].message });
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
       res.status(500).json({ message: "Failed to create notice" });
     }
   });
@@ -1466,8 +1137,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!notice) return res.status(404).json({ message: "Notice not found" });
       res.json(notice);
     } catch (err) {
-      if (err instanceof z.ZodError)
-        return res.status(400).json({ message: err.errors[0].message });
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
       res.status(500).json({ message: "Failed to update notice" });
     }
   });
@@ -1476,37 +1146,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       await storage.deleteNotice(req.params.id);
       res.json({ success: true });
-    } catch {
-      res.status(500).json({ message: "Failed to delete notice" });
-    }
+    } catch { res.status(500).json({ message: "Failed to delete notice" }); }
   });
 
-  app.get("/api/notices", requireAuth, (_req, res) => {
-    res.json([]);
-  });
+  app.get("/api/notices", requireAuth, (_req, res) => { res.json([]); });
 
   // ========== ATTEMPTS ==========
   app.get("/api/attempts", requireAuth, async (req, res) => {
     try {
       const attempts = await storage.getAttemptsByUser(req.session.userId!);
-      const uniqueQuizIds = [
-        ...new Set(attempts.map((a: any) => String(a.quizId))),
-      ];
+      const uniqueQuizIds = [...new Set(attempts.map((a: any) => String(a.quizId)))];
       const questionsByQuiz = new Map<string, any[]>();
-      await Promise.all(
-        uniqueQuizIds.map(async (qId) => {
-          const qs = await storage.getQuestionsByQuiz(qId);
-          questionsByQuiz.set(qId, qs);
-        }),
-      );
+      await Promise.all(uniqueQuizIds.map(async (qId) => {
+        const qs = await storage.getQuestionsByQuiz(qId);
+        questionsByQuiz.set(qId, qs);
+      }));
       const enriched = attempts.map((attempt: any) => {
         const allQuestions = questionsByQuiz.get(String(attempt.quizId)) ?? [];
         return {
           ...attempt,
           questions: allQuestions.map(({ correctAnswer, ...q }: any) => q),
-          correctAnswers: Object.fromEntries(
-            allQuestions.map((q: any) => [String(q.id), q.correctAnswer]),
-          ),
+          correctAnswers: Object.fromEntries(allQuestions.map((q: any) => [String(q.id), q.correctAnswer])),
           answers: attempt.answers ?? {},
         };
       });
@@ -1520,20 +1180,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/attempts/:id", requireAuth, async (req, res) => {
     try {
       const attempts = await storage.getAttemptsByUser(req.session.userId!);
-      const attempt = attempts.find(
-        (a: any) => String(a.id) === String(req.params.id),
-      );
-      if (!attempt)
-        return res.status(404).json({ message: "Attempt not found" });
-      const allQuestions = await storage.getQuestionsByQuiz(
-        String(attempt.quizId),
-      );
+      const attempt = attempts.find((a: any) => String(a.id) === String(req.params.id));
+      if (!attempt) return res.status(404).json({ message: "Attempt not found" });
+      const allQuestions = await storage.getQuestionsByQuiz(String(attempt.quizId));
       res.json({
         ...attempt,
         questions: allQuestions.map(({ correctAnswer, ...q }) => q),
-        correctAnswers: Object.fromEntries(
-          allQuestions.map((q) => [String(q.id), q.correctAnswer]),
-        ),
+        correctAnswers: Object.fromEntries(allQuestions.map((q) => [String(q.id), q.correctAnswer])),
         answers: attempt.answers ?? {},
       });
     } catch (err) {
@@ -1557,144 +1210,100 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       await storage.markAllNotificationsRead(req.session.userId!);
       res.json({ success: true });
-    } catch {
-      res.status(500).json({ message: "Failed to mark all notifications" });
-    }
+    } catch { res.status(500).json({ message: "Failed to mark all notifications" }); }
   });
 
   app.put("/api/notifications/:id/read", requireAuth, async (req, res) => {
     try {
       await storage.markNotificationRead(req.params.id, req.session.userId!);
       res.json({ success: true });
-    } catch {
-      res.status(500).json({ message: "Failed to mark notification" });
-    }
+    } catch { res.status(500).json({ message: "Failed to mark notification" }); }
   });
 
   app.delete("/api/notifications/clear-all", requireAuth, async (req, res) => {
     try {
       await storage.clearAllNotifications(req.session.userId!);
       res.json({ success: true });
-    } catch {
-      res.status(500).json({ message: "Failed to clear notifications" });
-    }
+    } catch { res.status(500).json({ message: "Failed to clear notifications" }); }
   });
 
   // ========== ADMIN STATS & USERS ==========
   app.get("/api/admin/stats", requireAdminAuth, async (_req, res) => {
-    try {
-      res.json(await storage.getAdminStats());
-    } catch {
-      res.status(500).json({ message: "Failed to fetch stats" });
-    }
+    try { res.json(await storage.getAdminStats()); }
+    catch { res.status(500).json({ message: "Failed to fetch stats" }); }
   });
 
   app.get("/api/admin/users", requireAdminAuth, async (_req, res) => {
-    try {
-      res.json(await storage.getAllUsers());
-    } catch {
-      res.status(500).json({ message: "Failed to fetch users" });
-    }
+    try { res.json(await storage.getAllUsers()); }
+    catch { res.status(500).json({ message: "Failed to fetch users" }); }
   });
 
   // ========== QUIZ MAINTENANCE ==========
-  app.post(
-    "/api/admin/quizzes/:quizId/sync-questions",
-    requireAdminAuth,
-    async (req, res) => {
-      try {
-        const { quizId } = req.params;
-        const quiz = await storage.getQuizById(quizId);
-        if (!quiz) return res.status(404).json({ message: "Quiz not found" });
+  app.post("/api/admin/quizzes/:quizId/sync-questions", requireAdminAuth, async (req, res) => {
+    try {
+      const { quizId } = req.params;
+      const quiz = await storage.getQuizById(quizId);
+      if (!quiz) return res.status(404).json({ message: "Quiz not found" });
 
-        let questionIds: string[] = req.body.questionIds ?? [];
-        if (questionIds.length === 0)
-          questionIds = (await storage.getAllQuestions()).map((q) => q.id);
-        if (questionIds.length === 0)
-          return res.json({
-            success: true,
-            linked: 0,
-            skipped: 0,
-            message: "No questions found to link.",
-          });
+      let questionIds: string[] = req.body.questionIds ?? [];
+      if (questionIds.length === 0) questionIds = (await storage.getAllQuestions()).map((q) => q.id);
+      if (questionIds.length === 0)
+        return res.json({ success: true, linked: 0, skipped: 0, message: "No questions found to link." });
 
-        const existingDocs = await QuizQuestionModel.find({ quizId }).lean();
-        const alreadyLinked = new Set(existingDocs.map((d) => d.questionId));
-        const currentMaxOrder =
-          existingDocs.length === 0
-            ? -1
-            : Math.max(...existingDocs.map((d) => d.order ?? 0));
+      const existingDocs = await QuizQuestionModel.find({ quizId }).lean();
+      const alreadyLinked = new Set(existingDocs.map((d) => d.questionId));
+      const currentMaxOrder = existingDocs.length === 0 ? -1 : Math.max(...existingDocs.map((d) => d.order ?? 0));
 
-        let linked = 0,
-          skipped = 0,
-          order = currentMaxOrder + 1;
-        for (const questionId of questionIds) {
-          if (alreadyLinked.has(questionId)) {
-            skipped++;
-            continue;
-          }
-          await QuizQuestionModel.create({ quizId, questionId, order });
-          order++;
-          linked++;
-        }
-
-        res.json({
-          success: true,
-          linked,
-          skipped,
-          total: questionIds.length,
-          message: `Linked ${linked} questions to quiz "${quiz.title}". ${skipped} were already linked.`,
-        });
-      } catch (err: any) {
-        console.error("sync-questions error:", err);
-        res
-          .status(500)
-          .json({ message: err.message || "Failed to sync questions" });
+      let linked = 0, skipped = 0, order = currentMaxOrder + 1;
+      for (const questionId of questionIds) {
+        if (alreadyLinked.has(questionId)) { skipped++; continue; }
+        await QuizQuestionModel.create({ quizId, questionId, order });
+        order++;
+        linked++;
       }
-    },
-  );
 
-  app.get(
-    "/api/admin/quizzes/:quizId/sync-status",
-    requireAdminAuth,
-    async (req, res) => {
-      try {
-        const { quizId } = req.params;
-        const quiz = await storage.getQuizById(quizId);
-        if (!quiz) return res.status(404).json({ message: "Quiz not found" });
+      res.json({
+        success: true, linked, skipped, total: questionIds.length,
+        message: `Linked ${linked} questions to quiz "${quiz.title}". ${skipped} were already linked.`,
+      });
+    } catch (err: any) {
+      console.error("sync-questions error:", err);
+      res.status(500).json({ message: err.message || "Failed to sync questions" });
+    }
+  });
 
-        const [allQs, linkedDocs] = await Promise.all([
-          storage.getAllQuestions(),
-          QuizQuestionModel.find({ quizId }).lean(),
-        ]);
+  app.get("/api/admin/quizzes/:quizId/sync-status", requireAdminAuth, async (req, res) => {
+    try {
+      const { quizId } = req.params;
+      const quiz = await storage.getQuizById(quizId);
+      if (!quiz) return res.status(404).json({ message: "Quiz not found" });
 
-        const linkedIds = new Set(linkedDocs.map((d) => d.questionId));
-        const unlinked = allQs.filter((q) => !linkedIds.has(q.id));
+      const [allQs, linkedDocs] = await Promise.all([
+        storage.getAllQuestions(),
+        QuizQuestionModel.find({ quizId }).lean(),
+      ]);
 
-        res.json({
-          quizId,
-          quizTitle: quiz.title,
-          totalQuestionsInBank: allQs.length,
-          linkedToThisQuiz: linkedIds.size,
-          notLinked: unlinked.length,
-          unlinkedQuestionIds: unlinked.map((q) => q.id),
-        });
-      } catch (err: any) {
-        res
-          .status(500)
-          .json({ message: err.message || "Failed to get sync status" });
-      }
-    },
-  );
+      const linkedIds = new Set(linkedDocs.map((d) => d.questionId));
+      const unlinked = allQs.filter((q) => !linkedIds.has(q.id));
+
+      res.json({
+        quizId, quizTitle: quiz.title,
+        totalQuestionsInBank: allQs.length,
+        linkedToThisQuiz: linkedIds.size,
+        notLinked: unlinked.length,
+        unlinkedQuestionIds: unlinked.map((q) => q.id),
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to get sync status" });
+    }
+  });
 
   const httpServer = createServer(app);
 
   // ========== CLEANUP EXPIRED NOTIFICATIONS ==========
   async function cleanupExpiredNotifications() {
     try {
-      const result = await GlobalNotificationModel.deleteMany({
-        expiresAt: { $lte: new Date() },
-      });
+      const result = await GlobalNotificationModel.deleteMany({ expiresAt: { $lte: new Date() } });
       if (result.deletedCount > 0)
         console.log(`🗑️ Deleted ${result.deletedCount} expired notifications`);
     } catch (err) {
