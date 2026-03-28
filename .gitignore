@@ -1,0 +1,12 @@
+/client/node_modules
+/server/node_modules
+
+
+node_modules/
+.env
+server/.env
+firebase-key.json
+server/firebase-key.json
+
+server/dist
+client/dist
