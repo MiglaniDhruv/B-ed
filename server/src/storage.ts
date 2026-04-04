@@ -909,7 +909,7 @@ export class MongoStorage implements IStorage {
     cache.invalidate(`notifications_${userId}`);
   }
 
-    // ── Notices ───────────────────────────────────────────────────────────────────
+  // ── Notices ───────────────────────────────────────────────────────────────────
   private docToNotice(doc: any): Notice {
     return {
       id: String(doc._id),
@@ -927,6 +927,31 @@ export class MongoStorage implements IStorage {
     return docs.map((d) => this.docToNotice(d));
   }
 
+  async getNotifications(userId: string) {
+    const cacheKey = `notifications_${userId}`;
+    const cached = cache.get<Notification[]>(cacheKey);
+    if (cached) return cached;
+
+    const docs = await GlobalNotificationModel.find({
+      clearedBy: { $ne: userId },
+    })
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .lean();
+
+    const result = docs.map((d) => this.docToNotification(d, userId));
+    cache.set(cacheKey, result, TTL.NOTIFICATIONS);
+    return result;
+  }
+
+  async markNotificationRead(id: string, userId: string) {
+    await GlobalNotificationModel.findByIdAndUpdate(id, {
+      $addToSet: { readBy: userId },
+    });
+    cache.invalidate(`notifications_${userId}`);
+  }
+
+  
   async getActiveNotices() {
     const now = new Date();
     const docs = await NoticeModel.find({ expiresAt: { $gt: now } }).lean();
