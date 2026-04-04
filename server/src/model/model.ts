@@ -326,6 +326,7 @@ export interface IGlobalNotification extends Omit<Document, "_id"> {
   clearedBy: string[];
   createdAt: Date;
   expiresAt: Date;
+  link: string | null; // ✅ added
 }
 
 const GlobalNotificationSchema = new Schema<IGlobalNotification>(
@@ -341,6 +342,7 @@ const GlobalNotificationSchema = new Schema<IGlobalNotification>(
       type: Date,
       default: () => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
     },
+    link: { type: String, default: null }, // ✅ added
   },
   { _id: false },
 );

@@ -225,6 +225,7 @@ export interface Notification {
   type: string;
   read: boolean | null;
   createdAt: Date | null;
+  link?: string | null; // ✅ added
 }
 
 // ─── Notice Board ─────────────────────────────────────────────────────────────

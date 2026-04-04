@@ -1429,6 +1429,7 @@ app.post("/api/admin/upload-pdf", upload.single("file"), async (req, res) => {
           `📢 Notice: ${notice.title}`,
           notice.message,
           "notice",
+          notice.link ?? null,
         ),
         broadcastPush(`📢 Notice: ${notice.title}`, notice.message, {
           type: "notice",

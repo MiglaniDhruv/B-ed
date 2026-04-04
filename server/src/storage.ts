@@ -135,7 +135,10 @@ export interface IStorage {
   getSubjectById(id: string): Promise<Subject | undefined>;
   getSubjectsBySemester(semesterNumber: number): Promise<Subject[]>;
   createSubject(data: InsertSubject): Promise<Subject>;
-  updateSubject(id: string, data: Partial<InsertSubject>): Promise<Subject | undefined>;
+  updateSubject(
+    id: string,
+    data: Partial<InsertSubject>,
+  ): Promise<Subject | undefined>;
   deleteSubject(id: string): Promise<void>;
   getUnitsBySubject(subjectId: string): Promise<Unit[]>;
   getUnitById(id: string): Promise<Unit | undefined>;
@@ -145,7 +148,10 @@ export interface IStorage {
   getStudyMaterialsByUnit(unitId: string): Promise<StudyMaterial[]>;
   getStudyMaterialById(id: string): Promise<StudyMaterial | undefined>;
   createStudyMaterial(data: InsertStudyMaterial): Promise<StudyMaterial>;
-  updateStudyMaterial(id: string, data: Partial<InsertStudyMaterial>): Promise<StudyMaterial | undefined>;
+  updateStudyMaterial(
+    id: string,
+    data: Partial<InsertStudyMaterial>,
+  ): Promise<StudyMaterial | undefined>;
   deleteStudyMaterial(id: string): Promise<void>;
   getAllQuizzes(): Promise<Quiz[]>;
   getQuizzesBySubject(subjectId: string): Promise<Quiz[]>;
@@ -155,29 +161,54 @@ export interface IStorage {
   deleteQuiz(id: string): Promise<void>;
   getAllQuestions(): Promise<Question[]>;
   getQuestionById(id: string): Promise<Question | undefined>;
-  createQuestion(data: Omit<InsertQuestion, "quizId" | "order">): Promise<Question>;
-  updateQuestion(id: string, data: Partial<Omit<InsertQuestion, "quizId">>): Promise<Question | undefined>;
+  createQuestion(
+    data: Omit<InsertQuestion, "quizId" | "order">,
+  ): Promise<Question>;
+  updateQuestion(
+    id: string,
+    data: Partial<Omit<InsertQuestion, "quizId">>,
+  ): Promise<Question | undefined>;
   deleteQuestion(id: string): Promise<void>;
   getQuestionsByQuiz(quizId: string): Promise<Question[]>;
-  addQuestionToQuiz(quizId: string, questionId: string, order?: number): Promise<void>;
+  addQuestionToQuiz(
+    quizId: string,
+    questionId: string,
+    order?: number,
+  ): Promise<void>;
   removeQuestionFromQuiz(quizId: string, questionId: string): Promise<void>;
-  reorderQuestionsInQuiz(quizId: string, orderedQuestionIds: string[]): Promise<void>;
+  reorderQuestionsInQuiz(
+    quizId: string,
+    orderedQuestionIds: string[],
+  ): Promise<void>;
   getAllQuestionsWithQuizInfo(quizId?: string): Promise<QuestionWithQuizInfo[]>;
-  createAttempt(data: Omit<QuizAttempt, "id" | "submittedAt">): Promise<QuizAttempt>;
+  createAttempt(
+    data: Omit<QuizAttempt, "id" | "submittedAt">,
+  ): Promise<QuizAttempt>;
   getAttemptsByUser(userId: string): Promise<(QuizAttempt & { quiz?: Quiz })[]>;
   getAttemptById(id: string): Promise<QuizAttempt | undefined>;
-  getUserAttemptForQuiz(userId: string, quizId: string): Promise<QuizAttempt | undefined>;
+  getUserAttemptForQuiz(
+    userId: string,
+    quizId: string,
+  ): Promise<QuizAttempt | undefined>;
   getQuizAnalytics(quizId: string): Promise<QuizAnalytics>;
   getNotifications(userId: string): Promise<Notification[]>;
   markNotificationRead(id: string, userId: string): Promise<void>;
   markAllNotificationsRead(userId: string): Promise<void>;
   clearAllNotifications(userId: string): Promise<void>;
-  notifyAllStudents(title: string, message: string, type: string): Promise<void>;
+  notifyAllStudents(
+    title: string,
+    message: string,
+    type: string,
+    link?: string | null,
+  ): Promise<void>;
   getNotices(): Promise<Notice[]>;
   getActiveNotices(): Promise<Notice[]>;
   getNoticeById(id: string): Promise<Notice | undefined>;
   createNotice(data: InsertNotice): Promise<Notice>;
-  updateNotice(id: string, data: Partial<InsertNotice>): Promise<Notice | undefined>;
+  updateNotice(
+    id: string,
+    data: Partial<InsertNotice>,
+  ): Promise<Notice | undefined>;
   deleteNotice(id: string): Promise<void>;
   getAllStudentIds(): Promise<string[]>;
   getUser(id: string): Promise<User | undefined>;
@@ -188,23 +219,59 @@ export interface IStorage {
   deleteUser(id: string): Promise<void>;
   getAllUsers(): Promise<Omit<User, "password">[]>;
   updateUserSessionToken(id: string, sessionToken: string): Promise<void>;
-  updateStudentSessionToken(id: string, sessionToken: string | null): Promise<void>;
-  createPasswordResetToken(userId: string, token: string, expiresAt: Date): Promise<void>;
-  getPasswordResetToken(token: string): Promise<{ id: string; userId: string; token: string; expiresAt: Date; used: boolean | null } | undefined>;
+  updateStudentSessionToken(
+    id: string,
+    sessionToken: string | null,
+  ): Promise<void>;
+  createPasswordResetToken(
+    userId: string,
+    token: string,
+    expiresAt: Date,
+  ): Promise<void>;
+  getPasswordResetToken(
+    token: string,
+  ): Promise<
+    | {
+        id: string;
+        userId: string;
+        token: string;
+        expiresAt: Date;
+        used: boolean | null;
+      }
+    | undefined
+  >;
   markTokenUsed(token: string): Promise<void>;
   getStudents(): Promise<Omit<Student, "password">[]>;
   getStudentsWithPasswords(): Promise<Student[]>;
   getStudentById(id: string): Promise<Student | undefined>;
   getStudentByEmail(email: string): Promise<Student | undefined>;
   getStudentByPhone(phone: string): Promise<Student | undefined>;
-  createStudent(data: Omit<Student, "id" | "createdAt">, plainPassword?: string): Promise<Omit<Student, "password">>;
-  createStudentsBulk(data: Array<Omit<Student, "id" | "createdAt"> & { plainPassword?: string }>): Promise<{ created: number; skipped: number }>;
-  updateStudent(id: string, data: { name?: string; email?: string; phone?: string }): Promise<Omit<Student, "password">>;
-  updateStudentPassword(id: string, hashedPassword: string, plainPassword?: string): Promise<void>;
+  createStudent(
+    data: Omit<Student, "id" | "createdAt">,
+    plainPassword?: string,
+  ): Promise<Omit<Student, "password">>;
+  createStudentsBulk(
+    data: Array<Omit<Student, "id" | "createdAt"> & { plainPassword?: string }>,
+  ): Promise<{ created: number; skipped: number }>;
+  updateStudent(
+    id: string,
+    data: { name?: string; email?: string; phone?: string },
+  ): Promise<Omit<Student, "password">>;
+  updateStudentPassword(
+    id: string,
+    hashedPassword: string,
+    plainPassword?: string,
+  ): Promise<void>;
   updateStudentStatus(id: string, status: Student["status"]): Promise<void>;
   deleteStudent(id: string): Promise<void>;
   getAdminStats(): Promise<Record<string, number>>;
-  getSemesterStats(semesterNumber: number): Promise<{ subjectCount: number; chapterCount: number; materialCount: number }>;
+  getSemesterStats(
+    semesterNumber: number,
+  ): Promise<{
+    subjectCount: number;
+    chapterCount: number;
+    materialCount: number;
+  }>;
   // FCM
   saveFcmToken(userId: string, token: string): Promise<void>;
   removeFcmToken(token: string): Promise<void>;
@@ -213,7 +280,6 @@ export interface IStorage {
 
 // ─── MongoDB Implementation ───────────────────────────────────────────────────
 export class MongoStorage implements IStorage {
-
   // ── Semesters ────────────────────────────────────────────────────────────────
   async getSemesters() {
     return SEMESTERS;
@@ -222,7 +288,11 @@ export class MongoStorage implements IStorage {
   async getSemesterStats(semesterNumber: number) {
     const EXAM_PREP = 5;
     const cacheKey = `semester_stats_${semesterNumber}`;
-    const cached = cache.get<{ subjectCount: number; chapterCount: number; materialCount: number }>(cacheKey);
+    const cached = cache.get<{
+      subjectCount: number;
+      chapterCount: number;
+      materialCount: number;
+    }>(cacheKey);
     if (cached) return cached;
 
     const subjects = await this.getSubjectsBySemester(semesterNumber);
@@ -233,12 +303,15 @@ export class MongoStorage implements IStorage {
     }
 
     const subjectIds = subjects.map((s) => s.id);
-    const units = await UnitModel.find({ subjectId: { $in: subjectIds } }).lean();
+    const units = await UnitModel.find({
+      subjectId: { $in: subjectIds },
+    }).lean();
     const unitIds = units.map((u) => String(u._id));
 
-    const materialCount = unitIds.length > 0
-      ? await StudyMaterialModel.countDocuments({ unitId: { $in: unitIds } })
-      : 0;
+    const materialCount =
+      unitIds.length > 0
+        ? await StudyMaterialModel.countDocuments({ unitId: { $in: unitIds } })
+        : 0;
 
     const result = {
       subjectCount: subjects.length,
@@ -265,7 +338,9 @@ export class MongoStorage implements IStorage {
   async getSubjects() {
     const cached = cache.get<Subject[]>("subjects_all");
     if (cached) return cached;
-    const docs = await SubjectModel.find().sort({ semesterNumber: 1, order: 1 }).lean();
+    const docs = await SubjectModel.find()
+      .sort({ semesterNumber: 1, order: 1 })
+      .lean();
     const result = docs.map((d) => this.docToSubject(d));
     cache.set("subjects_all", result, TTL.SUBJECTS);
     return result;
@@ -285,7 +360,9 @@ export class MongoStorage implements IStorage {
     const cacheKey = `subjects_sem_${semesterNumber}`;
     const cached = cache.get<Subject[]>(cacheKey);
     if (cached) return cached;
-    const docs = await SubjectModel.find({ semesterNumber }).sort({ order: 1 }).lean();
+    const docs = await SubjectModel.find({ semesterNumber })
+      .sort({ order: 1 })
+      .lean();
     const result = docs.map((d) => this.docToSubject(d));
     cache.set(cacheKey, result, TTL.SUBJECTS);
     return result;
@@ -299,7 +376,9 @@ export class MongoStorage implements IStorage {
   }
 
   async updateSubject(id: string, data: Partial<InsertSubject>) {
-    const doc = await SubjectModel.findByIdAndUpdate(id, data, { new: true }).lean();
+    const doc = await SubjectModel.findByIdAndUpdate(id, data, {
+      new: true,
+    }).lean();
     if (!doc) return undefined;
     cache.invalidate("subjects_all", `subject_${id}`);
     cache.invalidatePrefix("subjects_sem_");
@@ -355,7 +434,9 @@ export class MongoStorage implements IStorage {
   }
 
   async updateUnit(id: string, data: Partial<InsertUnit>) {
-    const doc = await UnitModel.findByIdAndUpdate(id, data, { new: true }).lean();
+    const doc = await UnitModel.findByIdAndUpdate(id, data, {
+      new: true,
+    }).lean();
     if (!doc) return undefined;
     cache.invalidate(`unit_${id}`, `units_${doc.subjectId}`);
     return this.docToUnit(doc);
@@ -390,7 +471,9 @@ export class MongoStorage implements IStorage {
     const cacheKey = `materials_${unitId}`;
     const cached = cache.get<StudyMaterial[]>(cacheKey);
     if (cached) return cached;
-    const docs = await StudyMaterialModel.find({ unitId }).sort({ order: 1 }).lean();
+    const docs = await StudyMaterialModel.find({ unitId })
+      .sort({ order: 1 })
+      .lean();
     const result = docs.map((d) => this.docToMaterial(d));
     cache.set(cacheKey, result, TTL.MATERIALS);
     return result;
@@ -409,7 +492,9 @@ export class MongoStorage implements IStorage {
   }
 
   async updateStudyMaterial(id: string, data: Partial<InsertStudyMaterial>) {
-    const doc = await StudyMaterialModel.findByIdAndUpdate(id, data, { new: true }).lean();
+    const doc = await StudyMaterialModel.findByIdAndUpdate(id, data, {
+      new: true,
+    }).lean();
     if (!doc) return undefined;
     cache.invalidate(`materials_${doc.unitId}`);
     return this.docToMaterial(doc);
@@ -464,13 +549,18 @@ export class MongoStorage implements IStorage {
   }
 
   async createQuiz(data: InsertQuiz) {
-    const doc = await QuizModel.create({ ...data, isActive: data.isActive ?? false });
+    const doc = await QuizModel.create({
+      ...data,
+      isActive: data.isActive ?? false,
+    });
     cache.invalidate("quizzes_all");
     return this.docToQuiz(doc.toObject());
   }
 
   async updateQuiz(id: string, data: Partial<InsertQuiz>) {
-    const doc = await QuizModel.findByIdAndUpdate(id, data, { new: true }).lean();
+    const doc = await QuizModel.findByIdAndUpdate(id, data, {
+      new: true,
+    }).lean();
     if (!doc) return undefined;
     cache.invalidate("quizzes_all", `quiz_${id}`);
     return this.docToQuiz(doc);
@@ -509,12 +599,21 @@ export class MongoStorage implements IStorage {
   }
 
   async createQuestion(data: Omit<InsertQuestion, "quizId" | "order">) {
-    const doc = await QuestionModel.create({ ...data, marks: data.marks ?? 1, order: 0 });
+    const doc = await QuestionModel.create({
+      ...data,
+      marks: data.marks ?? 1,
+      order: 0,
+    });
     return this.docToQuestion(doc.toObject());
   }
 
-  async updateQuestion(id: string, data: Partial<Omit<InsertQuestion, "quizId">>) {
-    const doc = await QuestionModel.findByIdAndUpdate(id, data, { new: true }).lean();
+  async updateQuestion(
+    id: string,
+    data: Partial<Omit<InsertQuestion, "quizId">>,
+  ) {
+    const doc = await QuestionModel.findByIdAndUpdate(id, data, {
+      new: true,
+    }).lean();
     return doc ? this.docToQuestion(doc) : undefined;
   }
 
@@ -525,11 +624,17 @@ export class MongoStorage implements IStorage {
 
   // ── Quiz ↔ Question join ──────────────────────────────────────────────────────
   async getQuestionsByQuiz(quizId: string) {
-    const links = await QuizQuestionModel.find({ quizId }).sort({ order: 1 }).lean();
+    const links = await QuizQuestionModel.find({ quizId })
+      .sort({ order: 1 })
+      .lean();
     if (links.length === 0) return [];
     const questionIds = links.map((l) => l.questionId);
-    const questions = await QuestionModel.find({ _id: { $in: questionIds } }).lean();
-    const qMap = new Map(questions.map((q) => [String(q._id), this.docToQuestion(q)]));
+    const questions = await QuestionModel.find({
+      _id: { $in: questionIds },
+    }).lean();
+    const qMap = new Map(
+      questions.map((q) => [String(q._id), this.docToQuestion(q)]),
+    );
     return links
       .map((l) => qMap.get(l.questionId))
       .filter((q): q is Question => !!q);
@@ -552,21 +657,29 @@ export class MongoStorage implements IStorage {
 
   async reorderQuestionsInQuiz(quizId: string, orderedQuestionIds: string[]) {
     const ops = orderedQuestionIds.map((questionId, index) =>
-      QuizQuestionModel.updateOne({ quizId, questionId }, { order: index })
+      QuizQuestionModel.updateOne({ quizId, questionId }, { order: index }),
     );
     await Promise.all(ops);
   }
 
-  async getAllQuestionsWithQuizInfo(quizId?: string): Promise<QuestionWithQuizInfo[]> {
-    const questions = quizId ? await this.getQuestionsByQuiz(quizId) : await this.getAllQuestions();
+  async getAllQuestionsWithQuizInfo(
+    quizId?: string,
+  ): Promise<QuestionWithQuizInfo[]> {
+    const questions = quizId
+      ? await this.getQuestionsByQuiz(quizId)
+      : await this.getAllQuestions();
     if (questions.length === 0) return [];
 
     const questionIds = questions.map((q) => q.id);
-    const links = await QuizQuestionModel.find({ questionId: { $in: questionIds } }).lean();
+    const links = await QuizQuestionModel.find({
+      questionId: { $in: questionIds },
+    }).lean();
 
     const quizIds = [...new Set(links.map((l) => l.quizId))];
     const quizzes = await QuizModel.find({ _id: { $in: quizIds } }).lean();
-    const quizMap = new Map(quizzes.map((q) => [String(q._id), this.docToQuiz(q)]));
+    const quizMap = new Map(
+      quizzes.map((q) => [String(q._id), this.docToQuiz(q)]),
+    );
 
     const questionToQuizIds = new Map<string, string[]>();
     for (const link of links) {
@@ -575,15 +688,31 @@ export class MongoStorage implements IStorage {
       questionToQuizIds.set(link.questionId, arr);
     }
 
-    return questions.map((q): QuestionWithQuizInfo => ({
-      ...q,
-      usedInQuizzes: (questionToQuizIds.get(q.id) ?? [])
-        .map((qzId) => {
-          const quiz = quizMap.get(qzId);
-          return quiz ? { quizId: qzId, quizTitle: quiz.title, quizSubjectId: quiz.subjectId } : null;
-        })
-        .filter((x): x is { quizId: string; quizTitle: string; quizSubjectId: string } => x !== null),
-    }));
+    return questions.map(
+      (q): QuestionWithQuizInfo => ({
+        ...q,
+        usedInQuizzes: (questionToQuizIds.get(q.id) ?? [])
+          .map((qzId) => {
+            const quiz = quizMap.get(qzId);
+            return quiz
+              ? {
+                  quizId: qzId,
+                  quizTitle: quiz.title,
+                  quizSubjectId: quiz.subjectId,
+                }
+              : null;
+          })
+          .filter(
+            (
+              x,
+            ): x is {
+              quizId: string;
+              quizTitle: string;
+              quizSubjectId: string;
+            } => x !== null,
+          ),
+      }),
+    );
   }
 
   // ── Attempts ─────────────────────────────────────────────────────────────────
@@ -616,9 +745,13 @@ export class MongoStorage implements IStorage {
   }
 
   async getAttemptsByUser(userId: string) {
-    const docs = await QuizAttemptModel.find({ userId }).sort({ submittedAt: -1 }).lean();
+    const docs = await QuizAttemptModel.find({ userId })
+      .sort({ submittedAt: -1 })
+      .lean();
     const attempts = docs.map((d) => this.docToAttempt(d));
-    const quizzes = await Promise.all(attempts.map((a) => this.getQuizById(a.quizId)));
+    const quizzes = await Promise.all(
+      attempts.map((a) => this.getQuizById(a.quizId)),
+    );
     return attempts.map((a, i) => ({ ...a, quiz: quizzes[i] || undefined }));
   }
 
@@ -661,16 +794,24 @@ export class MongoStorage implements IStorage {
 
     if (attempts.length === 0) {
       const result: QuizAnalytics = {
-        quizId, quizTitle: quiz.title, totalAttempts: 0,
-        averageScore: 0, averagePercentage: 0, highestScore: 0,
-        lowestScore: 0, totalQuestions, leaderboard: [],
+        quizId,
+        quizTitle: quiz.title,
+        totalAttempts: 0,
+        averageScore: 0,
+        averagePercentage: 0,
+        highestScore: 0,
+        lowestScore: 0,
+        totalQuestions,
+        leaderboard: [],
       };
       cache.set(cacheKey, result, TTL.ANALYTICS);
       return result;
     }
 
     const studentIds = [...new Set(attempts.map((a) => a.userId))];
-    const studentDocs = await StudentModel.find({ _id: { $in: studentIds } }).lean();
+    const studentDocs = await StudentModel.find({
+      _id: { $in: studentIds },
+    }).lean();
     const studentMap = new Map(studentDocs.map((s) => [String(s._id), s]));
 
     const entries = attempts.map((attempt) => {
@@ -682,21 +823,31 @@ export class MongoStorage implements IStorage {
         studentId: attempt.userId,
         studentName: student?.name ?? "Unknown Student",
         studentEmail: student?.email ?? "",
-        score, totalQuestions: total, percentage,
+        score,
+        totalQuestions: total,
+        percentage,
         timeTaken: attempt.timeTaken ?? null,
         submittedAt: attempt.submittedAt,
       };
     });
 
     entries.sort((a, b) =>
-      b.score !== a.score ? b.score - a.score : (a.timeTaken ?? Infinity) - (b.timeTaken ?? Infinity)
+      b.score !== a.score
+        ? b.score - a.score
+        : (a.timeTaken ?? Infinity) - (b.timeTaken ?? Infinity),
     );
 
     const scores = entries.map((e) => e.score);
     const result: QuizAnalytics = {
-      quizId, quizTitle: quiz.title, totalAttempts: attempts.length,
-      averageScore: Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10,
-      averagePercentage: Math.round(entries.reduce((a, b) => a + b.percentage, 0) / entries.length),
+      quizId,
+      quizTitle: quiz.title,
+      totalAttempts: attempts.length,
+      averageScore:
+        Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) /
+        10,
+      averagePercentage: Math.round(
+        entries.reduce((a, b) => a + b.percentage, 0) / entries.length,
+      ),
       highestScore: Math.max(...scores),
       lowestScore: Math.min(...scores),
       totalQuestions,
@@ -708,6 +859,7 @@ export class MongoStorage implements IStorage {
   }
 
   // ── Notifications ─────────────────────────────────────────────────────────────
+  // 1. Update docToNotification to include link
   private docToNotification(doc: any, userId: string): Notification {
     return {
       id: String(doc._id),
@@ -717,33 +869,34 @@ export class MongoStorage implements IStorage {
       type: doc.type || "info",
       read: (doc.readBy ?? []).includes(userId),
       createdAt: doc.createdAt || null,
+      link: doc.link ?? null, // ✅ add this
     };
   }
 
-  async getNotifications(userId: string) {
-    const cacheKey = `notifications_${userId}`;
-    const cached = cache.get<Notification[]>(cacheKey);
-    if (cached) return cached;
-
-    const docs = await GlobalNotificationModel.find({ clearedBy: { $ne: userId } })
-      .sort({ createdAt: -1 })
-      .limit(50)
-      .lean();
-
-    const result = docs.map((d) => this.docToNotification(d, userId));
-    cache.set(cacheKey, result, TTL.NOTIFICATIONS);
-    return result;
-  }
-
-  async markNotificationRead(id: string, userId: string) {
-    await GlobalNotificationModel.findByIdAndUpdate(id, { $addToSet: { readBy: userId } });
-    cache.invalidate(`notifications_${userId}`);
+  // 2. Update notifyAllStudents signature
+  async notifyAllStudents(
+    title: string,
+    message: string,
+    type: string,
+    link?: string | null,
+  ) {
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await GlobalNotificationModel.create({
+      title,
+      message,
+      type,
+      readBy: [],
+      clearedBy: [],
+      expiresAt,
+      link: link ?? null, // ✅ add this
+    });
+    cache.invalidatePrefix("notifications_");
   }
 
   async markAllNotificationsRead(userId: string) {
     await GlobalNotificationModel.updateMany(
       { clearedBy: { $ne: userId } },
-      { $addToSet: { readBy: userId } }
+      { $addToSet: { readBy: userId } },
     );
     cache.invalidate(`notifications_${userId}`);
   }
@@ -751,20 +904,12 @@ export class MongoStorage implements IStorage {
   async clearAllNotifications(userId: string) {
     await GlobalNotificationModel.updateMany(
       {},
-      { $addToSet: { clearedBy: userId, readBy: userId } }
+      { $addToSet: { clearedBy: userId, readBy: userId } },
     );
     cache.invalidate(`notifications_${userId}`);
   }
 
-// ✅ SAHI — 30 din ki expiry add karo
-async notifyAllStudents(title: string, message: string, type: string) {
-  const expiresAt = new Date(Date.now() +  24 * 60 * 60 * 1000); // 30 days
-  await GlobalNotificationModel.create({ 
-    title, message, type, readBy: [], clearedBy: [], expiresAt 
-  });
-  cache.invalidatePrefix("notifications_");
-}
-  // ── Notices ───────────────────────────────────────────────────────────────────
+    // ── Notices ───────────────────────────────────────────────────────────────────
   private docToNotice(doc: any): Notice {
     return {
       id: String(doc._id),
@@ -773,6 +918,7 @@ async notifyAllStudents(title: string, message: string, type: string) {
       priority: doc.priority || "normal",
       createdAt: doc.createdAt || null,
       expiresAt: doc.expiresAt || null,
+      link: doc.link ?? null, // ✅ add this
     };
   }
 
@@ -784,7 +930,11 @@ async notifyAllStudents(title: string, message: string, type: string) {
   async getActiveNotices() {
     const now = new Date();
     const docs = await NoticeModel.find({ expiresAt: { $gt: now } }).lean();
-    const priorityOrder: Record<string, number> = { urgent: 0, important: 1, normal: 2 };
+    const priorityOrder: Record<string, number> = {
+      urgent: 0,
+      important: 1,
+      normal: 2,
+    };
     return docs
       .map((d) => this.docToNotice(d))
       .sort((a, b) => {
@@ -806,7 +956,9 @@ async notifyAllStudents(title: string, message: string, type: string) {
   }
 
   async updateNotice(id: string, data: Partial<InsertNotice>) {
-    const doc = await NoticeModel.findByIdAndUpdate(id, data, { new: true }).lean();
+    const doc = await NoticeModel.findByIdAndUpdate(id, data, {
+      new: true,
+    }).lean();
     return doc ? this.docToNotice(doc) : undefined;
   }
 
@@ -821,7 +973,11 @@ async notifyAllStudents(title: string, message: string, type: string) {
   }
 
   async saveFcmToken(userId: string, token: string) {
-    await FcmTokenModel.updateOne({ token }, { userId, token }, { upsert: true });
+    await FcmTokenModel.updateOne(
+      { token },
+      { userId, token },
+      { upsert: true },
+    );
   }
 
   async removeFcmToken(token: string) {
@@ -877,7 +1033,9 @@ async notifyAllStudents(title: string, message: string, type: string) {
 
   async updateUser(id: string, data: Partial<User>) {
     const { id: _, ...updateData } = data as any;
-    const doc = await UserModel.findByIdAndUpdate(id, updateData, { new: true }).lean();
+    const doc = await UserModel.findByIdAndUpdate(id, updateData, {
+      new: true,
+    }).lean();
     if (!doc) return undefined;
     cache.invalidate(`user_${id}`);
     return this.docToUser(doc);
@@ -917,9 +1075,18 @@ async notifyAllStudents(title: string, message: string, type: string) {
   }
 
   // ── Password Reset ────────────────────────────────────────────────────────────
-  async createPasswordResetToken(userId: string, token: string, expiresAt: Date) {
+  async createPasswordResetToken(
+    userId: string,
+    token: string,
+    expiresAt: Date,
+  ) {
     await PasswordResetTokenModel.deleteMany({ userId, used: false });
-    await PasswordResetTokenModel.create({ userId, token, expiresAt, used: false });
+    await PasswordResetTokenModel.create({
+      userId,
+      token,
+      expiresAt,
+      used: false,
+    });
   }
 
   async getPasswordResetToken(token: string) {
@@ -993,7 +1160,9 @@ async notifyAllStudents(title: string, message: string, type: string) {
 
   async getStudentByEmail(email: string) {
     if (!email) return undefined;
-    const doc = await StudentModel.findOne({ email: email.toLowerCase() }).lean();
+    const doc = await StudentModel.findOne({
+      email: email.toLowerCase(),
+    }).lean();
     return doc ? this.docToStudent(doc) : undefined;
   }
 
@@ -1003,24 +1172,35 @@ async notifyAllStudents(title: string, message: string, type: string) {
     return doc ? this.docToStudent(doc) : undefined;
   }
 
-  async createStudent(data: Omit<Student, "id" | "createdAt">, plainPassword?: string) {
+  async createStudent(
+    data: Omit<Student, "id" | "createdAt">,
+    plainPassword?: string,
+  ) {
     const doc = await StudentModel.create({
       ...data,
       ...(plainPassword ? { plainPassword } : {}),
     });
     cache.invalidate("students_list");
-    const { password, sessionToken, ...rest } = this.docToStudent(doc.toObject());
+    const { password, sessionToken, ...rest } = this.docToStudent(
+      doc.toObject(),
+    );
     return rest;
   }
 
-  async createStudentsBulk(data: Array<Omit<Student, "id" | "createdAt"> & { plainPassword?: string }>) {
-    let created = 0, skipped = 0;
+  async createStudentsBulk(
+    data: Array<Omit<Student, "id" | "createdAt"> & { plainPassword?: string }>,
+  ) {
+    let created = 0,
+      skipped = 0;
     for (const s of data) {
       const [byEmail, byPhone] = await Promise.all([
         s.email ? this.getStudentByEmail(s.email) : Promise.resolve(undefined),
         s.phone ? this.getStudentByPhone(s.phone) : Promise.resolve(undefined),
       ]);
-      if (byEmail || byPhone) { skipped++; continue; }
+      if (byEmail || byPhone) {
+        skipped++;
+        continue;
+      }
       const { plainPassword, ...studentData } = s;
       await this.createStudent(studentData, plainPassword);
       created++;
@@ -1029,15 +1209,24 @@ async notifyAllStudents(title: string, message: string, type: string) {
     return { created, skipped };
   }
 
-  async updateStudent(id: string, data: { name?: string; email?: string; phone?: string }) {
-    const doc = await StudentModel.findByIdAndUpdate(id, data, { new: true }).lean();
+  async updateStudent(
+    id: string,
+    data: { name?: string; email?: string; phone?: string },
+  ) {
+    const doc = await StudentModel.findByIdAndUpdate(id, data, {
+      new: true,
+    }).lean();
     if (!doc) throw new Error("Student not found");
     cache.invalidate("students_list", `student_${id}`);
     const { password, sessionToken, ...rest } = this.docToStudent(doc);
     return rest;
   }
 
-  async updateStudentPassword(id: string, hashedPassword: string, plainPassword?: string) {
+  async updateStudentPassword(
+    id: string,
+    hashedPassword: string,
+    plainPassword?: string,
+  ) {
     const update: any = { password: hashedPassword };
     if (plainPassword) update.plainPassword = plainPassword;
     await StudentModel.findByIdAndUpdate(id, update);
@@ -1061,23 +1250,40 @@ async notifyAllStudents(title: string, message: string, type: string) {
     const cached = cache.get<Record<string, number>>("admin_stats");
     if (cached) return cached;
 
-    const [users, subjects, chapters, quizzes, questions, materials, attempts, students, notices, allQuizzes] =
-      await Promise.all([
-        UserModel.countDocuments(),
-        SubjectModel.countDocuments(),
-        UnitModel.countDocuments(),
-        QuizModel.countDocuments(),
-        QuestionModel.countDocuments(),
-        StudyMaterialModel.countDocuments(),
-        QuizAttemptModel.countDocuments(),
-        StudentModel.countDocuments(),
-        NoticeModel.countDocuments(),
-        this.getAllQuizzes(),
-      ]);
+    const [
+      users,
+      subjects,
+      chapters,
+      quizzes,
+      questions,
+      materials,
+      attempts,
+      students,
+      notices,
+      allQuizzes,
+    ] = await Promise.all([
+      UserModel.countDocuments(),
+      SubjectModel.countDocuments(),
+      UnitModel.countDocuments(),
+      QuizModel.countDocuments(),
+      QuestionModel.countDocuments(),
+      StudyMaterialModel.countDocuments(),
+      QuizAttemptModel.countDocuments(),
+      StudentModel.countDocuments(),
+      NoticeModel.countDocuments(),
+      this.getAllQuizzes(),
+    ]);
 
     const result = {
-      users, subjects, chapters, quizzes, questions,
-      materials, attempts, students, notices,
+      users,
+      subjects,
+      chapters,
+      quizzes,
+      questions,
+      materials,
+      attempts,
+      students,
+      notices,
       activeQuizzes: allQuizzes.filter((q) => q.isActive).length,
       totalQuizTime: allQuizzes.reduce((sum, q) => sum + (q.duration || 0), 0),
     };
