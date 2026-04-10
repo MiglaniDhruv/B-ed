@@ -7,9 +7,13 @@ import crypto from "crypto";
 import multer from "multer";
 import { bucket } from "./lib/firebase.js";
 import { storage } from "./storage.js";
-import { QuizQuestionModel, GlobalNotificationModel } from "./model/model.js";
+import {
+  QuizQuestionModel,
+  GlobalNotificationModel,
+  StudentModel,
+} from "./model/model.js";
 import { sendPasswordResetEmail } from "./email.js";
-
+import sharp from "sharp";
 import { broadcastPush, saveFcmToken, removeFcmToken } from "./lib/fcm.js";
 import {
   loginSchema,
@@ -67,7 +71,32 @@ const upload = multer({
     else cb(new Error("Only PDF files are allowed"));
   },
 });
+const imageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB tak accept — baad me compress karenge
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith("image/")) cb(null, true);
+    else cb(new Error("Only image files are allowed"));
+  },
+});
+async function compressTo200KB(buffer: Buffer): Promise<Buffer> {
+  // Step 1: Resize — agar width > 800px hai to resize karo (avatar ke liye kaafi hai)
+  let image = sharp(buffer).resize(800, 800, {
+    fit: "inside", // aspect ratio maintain karega
+    withoutEnlargement: true, // choti image ko bada mat karo
+  });
 
+  // Step 2: Quality iterate karte hue compress karo jab tak < 200KB na ho
+  let quality = 80;
+  let output: Buffer;
+
+  do {
+    output = await image.jpeg({ quality, mozjpeg: true }).toBuffer();
+    quality -= 10;
+  } while (output.length > 200 * 1024 && quality > 10);
+
+  return output;
+}
 declare module "express-session" {
   interface SessionData {
     userId?: string;
@@ -193,35 +222,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ========== PDF UPLOAD — Firebase Storage ==========
   // PDF Firebase Storage mein upload hoti hai.
   // MongoDB mein sirf signed URL save hoti hai, koi file data nahi.
-app.post("/api/admin/upload-pdf", upload.single("file"), async (req, res) => {
-  try {
-    const file = req.file;
-    if (!file) return res.status(400).json({ message: "No file uploaded" });
+  app.post("/api/admin/upload-pdf", upload.single("file"), async (req, res) => {
+    try {
+      const file = req.file;
+      if (!file) return res.status(400).json({ message: "No file uploaded" });
 
-    const fileName = `study-materials/${Date.now()}_${file.originalname}`;
-    const fileRef = bucket.file(fileName);
+      const fileName = `study-materials/${Date.now()}_${file.originalname}`;
+      const fileRef = bucket.file(fileName);
 
-    await new Promise((resolve, reject) => {
-      const stream = fileRef.createWriteStream({
-        metadata: { contentType: file.mimetype },
+      await new Promise((resolve, reject) => {
+        const stream = fileRef.createWriteStream({
+          metadata: { contentType: file.mimetype },
+        });
+        stream.on("finish", resolve);
+        stream.on("error", reject);
+        stream.end(file.buffer);
       });
-      stream.on("finish", resolve);
-      stream.on("error", reject);
-      stream.end(file.buffer);
-    });
 
-    // ✅ Proper Firebase download URL
-    const { getDownloadURL } = await import("firebase-admin/storage");
-    const downloadUrl = await getDownloadURL(fileRef);
-    
-    console.log("✅ Uploaded:", downloadUrl);
-    res.json({ url: downloadUrl });
+      // ✅ Proper Firebase download URL
+      const { getDownloadURL } = await import("firebase-admin/storage");
+      const downloadUrl = await getDownloadURL(fileRef);
 
-  } catch (err) {
-    console.error("❌ Upload failed:", err);
-    res.status(500).json({ message: "Upload failed" });
-  }
-});
+      console.log("✅ Uploaded:", downloadUrl);
+      res.json({ url: downloadUrl });
+    } catch (err) {
+      console.error("❌ Upload failed:", err);
+      res.status(500).json({ message: "Upload failed" });
+    }
+  });
   // NOTE: /api/files/:fileId route hataya gaya hai.
   // Ab saari PDFs Firebase Storage URLs se directly serve hoti hain.
   // MongoDB GridFS use nahi ho raha.
@@ -379,6 +407,16 @@ app.post("/api/admin/upload-pdf", upload.single("file"), async (req, res) => {
   });
 
   app.get("/api/auth/me", async (req, res) => {
+    const formatStudent = (student: any) => {
+      const { password: _, ...safeStudent } = student;
+      return {
+        ...safeStudent,
+        avatarUrl: safeStudent.avatarUrl || null,
+        username: safeStudent.name || safeStudent.email,
+        displayName: safeStudent.name,
+      };
+    };
+
     let userId: string | undefined;
     let tokenSession: string | undefined;
 
@@ -416,6 +454,9 @@ app.post("/api/admin/upload-pdf", upload.single("file"), async (req, res) => {
           return res.json({ user: safeUser });
         }
         const student = await storage.getStudentById(userId);
+
+        console.log("RAW STUDENT FROM DB:");
+        console.log(JSON.stringify(student, null, 2));
         if (student) {
           if ((student as any).status === "blocked") {
             return res.status(403).json({
@@ -423,14 +464,7 @@ app.post("/api/admin/upload-pdf", upload.single("file"), async (req, res) => {
               code: "ACCOUNT_BLOCKED",
             });
           }
-          const { password: _, ...safeStudent } = student;
-          return res.json({
-            user: {
-              ...safeStudent,
-              username: safeStudent.name || safeStudent.email,
-              displayName: safeStudent.name,
-            },
-          });
+          return res.json({ user: formatStudent(student) }); // fix 1
         }
         return res.status(401).json({ message: "User not found" });
       }
@@ -459,15 +493,7 @@ app.post("/api/admin/upload-pdf", upload.single("file"), async (req, res) => {
         const { password: _, ...safeUser } = dbUser as any;
         return res.json({ user: safeUser });
       } else {
-        const s = dbUser as any;
-        const { password: _, ...safeStudent } = s;
-        return res.json({
-          user: {
-            ...safeStudent,
-            username: safeStudent.name || safeStudent.email,
-            displayName: safeStudent.name,
-          },
-        });
+        return res.json({ user: formatStudent(dbUser) }); // fix 2
       }
     }
 
@@ -484,14 +510,7 @@ app.post("/api/admin/upload-pdf", upload.single("file"), async (req, res) => {
           code: "ACCOUNT_BLOCKED",
         });
       }
-      const { password: _, ...safeStudent } = student;
-      return res.json({
-        user: {
-          ...safeStudent,
-          username: safeStudent.name || safeStudent.email,
-          displayName: safeStudent.name,
-        },
-      });
+      return res.json({ user: formatStudent(student) }); // fix 3
     }
     return res.status(401).json({ message: "User not found" });
   });
@@ -1381,6 +1400,7 @@ app.post("/api/admin/upload-pdf", upload.single("file"), async (req, res) => {
       const top3 = analytics.leaderboard.slice(0, 3).map((entry) => ({
         rank: entry.rank,
         studentName: entry.studentName,
+        studentPhoto: entry.studentPhoto,
         score: entry.score,
         totalQuestions: entry.totalQuestions,
         percentage: entry.percentage,
@@ -1394,6 +1414,7 @@ app.post("/api/admin/upload-pdf", upload.single("file"), async (req, res) => {
           ? {
               rank: myEntry.rank,
               studentName: myEntry.studentName,
+              studentPhoto: myEntry.studentPhoto,
               score: myEntry.score,
               totalQuestions: myEntry.totalQuestions,
               percentage: myEntry.percentage,
@@ -1676,6 +1697,97 @@ app.post("/api/admin/upload-pdf", upload.single("file"), async (req, res) => {
   );
 
   const httpServer = createServer(app);
+
+  // ======== profile picture upload handling ========
+  // ========== STUDENT AVATAR UPLOAD — Firebase Storage ==========
+  app.post(
+    "/api/student/avatar",
+    requireAuth,
+    imageUpload.single("avatar"),
+    async (req, res) => {
+      try {
+        const file = req.file;
+        if (!file)
+          return res.status(400).json({ message: "No image uploaded" });
+
+        const userId = req.session.userId!;
+
+        // ── 1. Compress to max 200KB ──────────────────────────────────────────
+        let compressedBuffer: Buffer;
+        try {
+          compressedBuffer = await compressTo200KB(file.buffer);
+        } catch (err) {
+          console.error("❌ Compression failed:", err);
+          return res.status(400).json({ message: "Invalid image file" });
+        }
+
+        console.log(
+          `📸 Original: ${(file.size / 1024).toFixed(1)}KB → Compressed: ${(compressedBuffer.length / 1024).toFixed(1)}KB`,
+        );
+
+        // ── 2. Firebase Storage me upload karo ───────────────────────────────
+        // Old avatar delete karo pehle (agar exist karta hai)
+        try {
+          const student = await storage.getStudentById(userId);
+          if (student && (student as any).avatarUrl) {
+            // Firebase Storage URL se file path nikalo
+            const oldUrl: string = (student as any).avatarUrl;
+            // URL format: .../o/avatars%2F{userId}_...jpg?alt=media&token=...
+            const match = oldUrl.match(/\/o\/(.+?)\?/);
+            if (match) {
+              const oldPath = decodeURIComponent(match[1]);
+              await bucket
+                .file(oldPath)
+                .delete()
+                .catch(() => {
+                  // Ignore — file already deleted ya exist nahi karti
+                });
+            }
+          }
+        } catch {
+          // Old avatar delete fail ho — koi baat nahi, continue
+        }
+
+        // ── 3. Naya avatar upload ─────────────────────────────────────────────
+        const fileName = `avatars/${userId}_${Date.now()}.jpg`;
+        const fileRef = bucket.file(fileName);
+
+        await new Promise<void>((resolve, reject) => {
+          const stream = fileRef.createWriteStream({
+            metadata: {
+              contentType: "image/jpeg",
+              cacheControl: "public, max-age=31536000",
+            },
+          });
+          stream.on("finish", resolve);
+          stream.on("error", reject);
+          stream.end(compressedBuffer);
+        });
+
+        // ── 4. Public download URL lo ─────────────────────────────────────────
+        const { getDownloadURL } = await import("firebase-admin/storage");
+        const avatarUrl = await getDownloadURL(fileRef);
+
+        // ── 5. DB me avatarUrl save karo ──────────────────────────────────────
+        await storage.updateStudent(userId, { avatarUrl } as any);
+        try {
+          await StudentModel.findByIdAndUpdate(
+            userId,
+            { $set: { avatarUrl } },
+            { new: true },
+          );
+          console.log(`✅ avatarUrl saved directly to MongoDB for ${userId}`);
+        } catch (mongoErr) {
+          console.error("❌ Direct MongoDB save failed:", mongoErr);
+        }
+        console.log(`✅ Avatar uploaded for user ${userId}: ${avatarUrl}`);
+        res.json({ avatarUrl });
+      } catch (err) {
+        console.error("❌ Avatar upload error:", err);
+        res.status(500).json({ message: "Avatar upload failed" });
+      }
+    },
+  );
 
   // ========== CLEANUP EXPIRED NOTIFICATIONS ==========
   async function cleanupExpiredNotifications() {

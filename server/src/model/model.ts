@@ -58,6 +58,7 @@ export interface IStudent extends Omit<Document, "_id"> {
   plainPassword: string | null;
   enrollmentNumber: string;
   status: "pending" | "approved" | "blocked";
+  avatarUrl: string | null;
   sessionToken: string | null;
   createdAt: Date;
 }
@@ -76,6 +77,7 @@ const StudentSchema = new Schema<IStudent>(
       enum: ["pending", "approved", "blocked"],
       default: "pending",
     },
+    avatarUrl: { type: String, default: null },
     sessionToken: { type: String, default: null },
   },
   { timestamps: { createdAt: true, updatedAt: false }, _id: false },

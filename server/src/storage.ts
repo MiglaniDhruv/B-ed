@@ -95,6 +95,7 @@ export interface Student {
   status: "pending" | "approved" | "blocked";
   sessionToken?: string | null;
   createdAt: Date | null;
+  avatarUrl?: string;
 }
 
 // ─── Analytics Types ──────────────────────────────────────────────────────────
@@ -111,6 +112,7 @@ export interface QuizAnalytics {
     rank: number;
     studentId: string;
     studentName: string;
+    studentPhoto?: string | null;
     studentEmail: string;
     score: number;
     totalQuestions: number;
@@ -228,9 +230,7 @@ export interface IStorage {
     token: string,
     expiresAt: Date,
   ): Promise<void>;
-  getPasswordResetToken(
-    token: string,
-  ): Promise<
+  getPasswordResetToken(token: string): Promise<
     | {
         id: string;
         userId: string;
@@ -265,9 +265,7 @@ export interface IStorage {
   updateStudentStatus(id: string, status: Student["status"]): Promise<void>;
   deleteStudent(id: string): Promise<void>;
   getAdminStats(): Promise<Record<string, number>>;
-  getSemesterStats(
-    semesterNumber: number,
-  ): Promise<{
+  getSemesterStats(semesterNumber: number): Promise<{
     subjectCount: number;
     chapterCount: number;
     materialCount: number;
@@ -823,6 +821,7 @@ export class MongoStorage implements IStorage {
         studentId: attempt.userId,
         studentName: student?.name ?? "Unknown Student",
         studentEmail: student?.email ?? "",
+        studentPhoto: (student as any)?.avatarUrl ?? null,
         score,
         totalQuestions: total,
         percentage,
@@ -951,7 +950,6 @@ export class MongoStorage implements IStorage {
     cache.invalidate(`notifications_${userId}`);
   }
 
-  
   async getActiveNotices() {
     const now = new Date();
     const docs = await NoticeModel.find({ expiresAt: { $gt: now } }).lean();
@@ -1142,9 +1140,9 @@ export class MongoStorage implements IStorage {
       status: doc.status || "pending",
       sessionToken: doc.sessionToken || null,
       createdAt: doc.createdAt || null,
+      avatarUrl: doc.avatarUrl || null,
     };
   }
-
   async getStudents() {
     const cached = cache.get<Omit<Student, "password">[]>("students_list");
     if (cached) return cached;
@@ -1234,15 +1232,17 @@ export class MongoStorage implements IStorage {
     return { created, skipped };
   }
 
-  async updateStudent(
-    id: string,
-    data: { name?: string; email?: string; phone?: string },
-  ) {
-    const doc = await StudentModel.findByIdAndUpdate(id, data, {
-      new: true,
-    }).lean();
+  async updateStudent(id: string, data: Partial<IStudent>) {
+    const doc = await StudentModel.findByIdAndUpdate(
+      id,
+      { $set: data },
+      { new: true },
+    ).lean();
+
     if (!doc) throw new Error("Student not found");
+
     cache.invalidate("students_list", `student_${id}`);
+
     const { password, sessionToken, ...rest } = this.docToStudent(doc);
     return rest;
   }
